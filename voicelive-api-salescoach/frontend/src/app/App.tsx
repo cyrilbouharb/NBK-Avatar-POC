@@ -48,8 +48,8 @@ const useStyles = makeStyles({
     gap: '12px',
   },
   logoImage: {
-    height: '50px',
-    maxWidth: '180px',
+    height: '65px',
+    maxWidth: '220px',
     objectFit: 'contain',
   },
   logoText: {
