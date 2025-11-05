@@ -23,27 +23,53 @@ export function useWebRTC(onSendOffer: (sdp: string) => void) {
         }))
       }
 
+      if (!servers?.length) {
+        servers = [{ urls: 'stun:stun.l.google.com:19302' }]
+      }
+
       const pc = new RTCPeerConnection({
         iceServers: servers,
         bundlePolicy: 'max-bundle',
       })
 
+      let offerSent = false
+      const sendLocalDescription = () => {
+        if (offerSent || !pc.localDescription) return
+        const payload = btoa(
+          JSON.stringify({
+            type: pc.localDescription.type,
+            sdp: pc.localDescription.sdp,
+          })
+        )
+        onSendOffer(payload)
+        offerSent = true
+      }
+
+      const iceGatheringTimer = window.setTimeout(() => {
+        sendLocalDescription()
+      }, 2000)
+
       pc.onicecandidate = e => {
-        if (!e.candidate && pc.localDescription) {
-          const sdp = btoa(
-            JSON.stringify({
-              type: 'offer',
-              sdp: pc.localDescription.sdp,
-            })
-          )
-          onSendOffer(sdp)
+        if (!e.candidate) {
+          window.clearTimeout(iceGatheringTimer)
+          sendLocalDescription()
         }
       }
+
+      pc.addEventListener('icegatheringstatechange', () => {
+        if (pc.iceGatheringState === 'complete') {
+          window.clearTimeout(iceGatheringTimer)
+          sendLocalDescription()
+        }
+      })
 
       pc.ontrack = e => {
         if (e.track.kind === 'video' && videoRef.current) {
           videoRef.current.srcObject = e.streams[0]
-          videoRef.current.play()
+          const playPromise = videoRef.current.play()
+          if (playPromise) {
+            void playPromise.catch(() => {})
+          }
         } else if (e.track.kind === 'audio') {
           const audio = document.createElement('audio')
           audio.srcObject = e.streams[0]
@@ -58,6 +84,11 @@ export function useWebRTC(onSendOffer: (sdp: string) => void) {
 
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
+
+      if (pc.iceGatheringState === 'complete') {
+        window.clearTimeout(iceGatheringTimer)
+        sendLocalDescription()
+      }
 
       pcRef.current = pc
     },
