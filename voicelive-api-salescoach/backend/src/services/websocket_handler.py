@@ -34,7 +34,7 @@ DEFAULT_NOISE_REDUCTION_TYPE = "azure_deep_noise_suppression"
 DEFAULT_ECHO_CANCELLATION_TYPE = "server_echo_cancellation"
 DEFAULT_AVATAR_CHARACTER = "jeff"
 DEFAULT_AVATAR_STYLE = "business"
-DEFAULT_VOICE_NAME = "ar-SA-HamedNeural"
+DEFAULT_VOICE_NAME = "en-US-AndrewMultilingualNeural"
 DEFAULT_VOICE_TYPE = "azure-standard"
 
 # Message types

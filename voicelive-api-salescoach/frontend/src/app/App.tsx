@@ -47,6 +47,11 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '12px',
   },
+  logoImage: {
+    height: '50px',
+    maxWidth: '180px',
+    objectFit: 'contain',
+  },
   logoText: {
     fontSize: '32px',
     fontWeight: 'bold',
@@ -242,8 +247,21 @@ export default function App() {
       {/* NBK Header */}
       <header className={styles.header}>
         <div className={styles.logo}>
-          <div className={styles.logoText}>NBK</div>
-          <span style={{ fontSize: '14px', color: '#666' }}>الوطني</span>
+          {/* NBK Logo - place nbk-logo.jpg in the public folder */}
+          <img 
+            src="/nbk-logo.jpg" 
+            alt="NBK Logo" 
+            className={styles.logoImage}
+            onError={(e) => {
+              // Fallback to text if image not found
+              e.currentTarget.style.display = 'none';
+              const fallback = document.createElement('div');
+              fallback.className = styles.logoText;
+              fallback.textContent = 'NBK';
+              e.currentTarget.parentElement?.appendChild(fallback);
+            }}
+          />
+          <span style={{ fontSize: '14px', color: '#666', marginLeft: '8px' }}>الوطني</span>
         </div>
         <nav className={styles.nav}>
           <button className={styles.navButton}>ABOUT</button>
