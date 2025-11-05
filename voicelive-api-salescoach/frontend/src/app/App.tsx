@@ -261,10 +261,7 @@ export default function App() {
               e.currentTarget.parentElement?.appendChild(fallback);
             }}
           />
-          <div style={{ display: 'flex', flexDirection: 'column', marginLeft: '12px' }}>
-            <span style={{ fontSize: '20px', fontWeight: '600', color: '#1e3a5f', lineHeight: '1.2' }}>الوطني</span>
-            <span style={{ fontSize: '14px', fontWeight: '500', color: '#666', lineHeight: '1.2' }}>بنك</span>
-          </div>
+          <span style={{ fontSize: '20px', fontWeight: '600', color: '#1e3a5f', marginLeft: '12px' }}>بنك الوطني</span>
         </div>
         <nav className={styles.nav}>
           <button className={styles.navButton}>ABOUT</button>
