@@ -20,16 +20,6 @@ param principalType string
 
 param useFoundryAgents bool = false
 
-@description('Name of the manually created Bing Grounding resource')
-param bingGroundingResourceName string = ''
-
-@description('API key for the manually created Bing Grounding resource')
-@secure()
-param bingGroundingResourceKey string = ''
-
-@description('Name of the manually created AI Foundry project')
-param aiFoundryProjectName string = ''
-
 // Tags that should be applied to all resources.
 //
 // Note that 'azd-service-name' tags should be applied separately to service host resources.
@@ -56,9 +46,6 @@ module resources 'resources.bicep' = {
     principalType: principalType
     voicelabExists: voicelabExists
     useFoundryAgents: useFoundryAgents
-    bingGroundingResourceName: bingGroundingResourceName
-    bingGroundingResourceKey: bingGroundingResourceKey
-    aiFoundryProjectName: aiFoundryProjectName
   }
 }
 
@@ -71,4 +58,3 @@ output PROJECT_ENDPOINT string = resources.outputs.PROJECT_ENDPOINT
 output AZURE_OPENAI_ENDPOINT string = resources.outputs.AZURE_OPENAI_ENDPOINT
 output AZURE_SPEECH_REGION string = resources.outputs.AZURE_SPEECH_REGION
 output AI_FOUNDRY_RESOURCE_NAME string = resources.outputs.AI_FOUNDRY_RESOURCE_NAME
-output BING_GROUNDING_RESOURCE_NAME string = resources.outputs.BING_GROUNDING_RESOURCE_NAME

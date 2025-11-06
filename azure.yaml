@@ -1,26 +1,20 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
-
-name: avatar-ip
+name: voicelab-sales-training
 metadata:
-    template: azd-init@1.20.3
+  template: azd-init@1.18.1
+infra:
+  provider: bicep
+  path: infra
+  module: main
 services:
-    backend:
-        project: voicelive-api-salescoach/backend
-        host: containerapp
-        language: python
-        docker:
-            path: Dockerfile
-    frontend:
-        project: voicelive-api-salescoach/frontend
-        host: containerapp
-        language: ts
-        dist: dist
+  voicelab:
+    project: voicelive-api-salescoach/backend
+    host: containerapp
+    language: python
+    docker:
+      path: Dockerfile
+      context: ../
+      remoteBuild: true
 resources:
-    backend:
-        type: host.containerapp
-        port: 8000
-    frontend:
-        type: host.containerapp
-        uses:
-            - backend
-        port: 80
+  voicelab:
+    type: host.containerapp
+    port: 8000

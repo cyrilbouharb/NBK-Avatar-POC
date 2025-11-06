@@ -96,47 +96,6 @@ azd up
 8. Select the configuration: `NBK-Website-Search`
 9. Click **Save**
 
-### 4. Capture Manual Configuration Values
-
-These items are not provisioned automatically and must be supplied each time you clone the environment into a new Azure tenant or subscription:
-
-- **AGENT_ID** – The ID of the Azure AI Agent you created manually in Azure AI Foundry (`Agents` → select your agent → copy `Agent ID`).
-- **PROJECT_ENDPOINT** – The Project endpoint emitted by `azd up` (look for `PROJECT_ENDPOINT` in the CLI output or run `azd env get-value PROJECT_ENDPOINT`). If you renamed the project, capture `AZURE_AI_PROJECT_NAME` as well.
-- **BING_GROUNDING_RESOURCE_NAME** and **BING_GROUNDING_RESOURCE_KEY** – From the Bing Grounding resource in Azure Portal (`Keys and Endpoint`).
-- **BING_GROUNDING_CONFIG_ID** – The configuration you created under Bing Grounding → **Configurations**.
-
-Persist them in your active Azure Developer CLI environment so subsequent `azd up` commands reuse the same resources:
-
-```powershell
-azd env set USE_AZURE_AI_AGENTS true
-azd env set AGENT_ID <agent-id>
-azd env set PROJECT_ENDPOINT <project-endpoint>
-azd env set BING_GROUNDING_RESOURCE_NAME <bing-resource-name>
-azd env set --secret BING_GROUNDING_RESOURCE_KEY <bing-resource-key>
-azd env set BING_GROUNDING_CONFIG_ID <bing-config-id>
-azd env set AZURE_AI_PROJECT_NAME <project-name>   # optional if you keep the default
-```
-
-> **Tip:** Use `azd env get-values` to confirm the secrets are stored before deploying again.
-
-### 5. Supply Service Endpoints for Cloud Runtime
-
-Values that live in your local `.env` (for example the Azure AI, Speech, or OpenAI keys) must also be provided to the Azure environment so Container Apps can read them at runtime. Use `azd env set` commands for any entry that appears in `.env.template`, marking secrets with `--secret`:
-
-```powershell
-azd env set AZURE_AI_RESOURCE_NAME <ai-resource-name>
-azd env set AZURE_AI_REGION <region>
-azd env set AZURE_AI_PROJECT_NAME <project-name>
-azd env set PROJECT_ENDPOINT <project-endpoint>
-azd env set --secret AZURE_SPEECH_KEY <speech-key>
-azd env set AZURE_SPEECH_REGION <speech-region>
-azd env set --secret AZURE_OPENAI_API_KEY <openai-key>
-azd env set AZURE_OPENAI_ENDPOINT <openai-endpoint>
-azd env set MODEL_DEPLOYMENT_NAME <model-deployment>
-```
-
-Repeat for any additional variables you rely on (for example `AZURE_AVATAR_CHARACTER`, `BING_GROUNDING_*`, or custom scenario flags). `azd up` reads every value from the current environment file and injects them into the Container Apps configuration, so once they are set you do not need to touch application settings in the Azure Portal manually.
-
 ## Language Configuration
 
 ### Arabic Voice (Default)
@@ -163,35 +122,6 @@ azd up
 
 The agent automatically detects the customer's language and responds accordingly. No additional configuration needed.
 
-## Replicating in Another Tenant or Subscription
-
-When you need to stand up the solution in a different tenant or subscription, capture the values above and then:
-
-1. **Authenticate against the target tenant**
-   ```powershell
-   azd auth login --tenant <tenant-id>
-   ```
-2. **Create a fresh environment**
-   ```powershell
-   azd env new <env-name> --subscription <subscription-id>
-   ```
-3. **Seed the manual configuration** using the values you saved from the source deployment:
-   ```powershell
-   azd env set USE_AZURE_AI_AGENTS true
-   azd env set AGENT_ID <agent-id>
-   azd env set PROJECT_ENDPOINT <project-endpoint>
-   azd env set AZURE_AI_PROJECT_NAME <project-name>
-   azd env set BING_GROUNDING_RESOURCE_NAME <bing-resource-name>
-   azd env set --secret BING_GROUNDING_RESOURCE_KEY <bing-resource-key>
-   azd env set BING_GROUNDING_CONFIG_ID <bing-config-id>
-   ```
-4. **Redeploy**
-   ```powershell
-   azd up
-   ```
-
-The redeployment will build new container images from the current `backend/` and `frontend/` sources and attach them to the Container App revision in the target tenant.
-
 ## Testing the Deployment
 
 1. Open the deployed application URL (from `azd up` output)
@@ -205,26 +135,6 @@ The redeployment will build new container images from the current `backend/` and
    ```
    "Hello, can you tell me about NBK credit cards?"
    ```
-
-## Validate Azure Container Apps Runtime
-
-Use these commands to confirm new revisions are running with the latest backend and frontend code:
-
-```powershell
-$rg = azd env get-value RESOURCE_GROUP_NAME
-$app = azd env get-value AZURE_CONTAINER_APP_NAME
-
-# Inspect the active revision and image digest
-az containerapp revision list --name $app --resource-group $rg --query "[?properties.active].{name:name,image:properties.template.containers[0].image}" -o table
-
-# Follow live application logs
-az containerapp logs show --name $app --resource-group $rg --follow
-
-# Optionally exec into the running container to run a quick health probe
-az containerapp exec --name $app --resource-group $rg --command "curl -I http://localhost:8000/api/config"
-```
-
-If you deploy separate frontend and backend Container Apps, repeat the commands with their respective names (the outputs from `azd up` include each app's name and FQDN). A successful deployment shows a new revision with the current timestamp and your container registry image digest changing after every `azd up`.
 
 ## Troubleshooting
 
