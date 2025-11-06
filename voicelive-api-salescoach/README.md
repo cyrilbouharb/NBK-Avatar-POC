@@ -61,23 +61,34 @@ https://github.com/user-attachments/assets/904f1555-6981-4780-ae64-c5757337bcad
 
 ### Deploy to Azure
 
+**📚 For complete deployment instructions and troubleshooting, see:**
+- [AZURE-DEPLOYMENT-GUIDE.md](AZURE-DEPLOYMENT-GUIDE.md) - Comprehensive deployment guide
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Solutions for common issues
+
+**Quick Start:**
+
 1. **Deploy to Azure**:
    ```bash
    azd up
    ```
-2. **Configure Bing Custom Search**:
+
+2. **Configure Container App Environment** (if Avatar doesn't load):
+   
+   If the Avatar doesn't appear after deployment, you may need to manually configure the Container App environment variables. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#issue-avatar-not-loading-after-successful-deployment) for detailed instructions.
+
+3. **Configure Bing Custom Search**:
    - After deployment, go to the Bing Grounding with Custom Search resource in Azure Portal
    - Create a new configuration instance
    - Add NBK website domains (e.g., `https://www.nbk.com`, `https://www.nbk.com.kw`)
    - Note the Configuration ID
    
-3. **Update Environment Variable**:
+4. **Update Environment Variable**:
    ```bash
    azd env set BING_GROUNDING_CONFIG_ID <your-config-id>
    azd up
    ```
 
-4. **Access your application**:
+5. **Access your application**:
    The deployment will output the URL where your application is running.
 
 ### Local Development
