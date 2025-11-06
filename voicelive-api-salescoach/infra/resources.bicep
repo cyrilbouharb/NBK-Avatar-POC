@@ -8,16 +8,6 @@ param voicelabExists bool
 
 param useFoundryAgents bool
 
-@description('Name of the manually created Bing Grounding resource')
-param bingGroundingResourceName string = ''
-
-@description('API key for the manually created Bing Grounding resource')
-@secure()
-param bingGroundingResourceKey string = ''
-
-@description('Name of the manually created AI Foundry project')
-param aiFoundryProjectName string = ''
-
 @description('Id of the user or app to assign application roles')
 param principalId string
 
@@ -179,10 +169,6 @@ module voicelab 'br/public:avm/res/app/container-app:0.8.0' = {
           name: 'speech-api-key'
           value: speechService.listKeys().key1
         }
-        {
-          name: 'bing-grounding-api-key'
-          value: !empty(bingGroundingResourceKey) ? bingGroundingResourceKey : 'placeholder-key-not-set'
-        }
       ]
     }
     containers: [
@@ -212,9 +198,7 @@ module voicelab 'br/public:avm/res/app/container-app:0.8.0' = {
           }
           {
             name: 'PROJECT_ENDPOINT'
-            value: !empty(aiFoundryProjectName) 
-              ? 'https://${aiFoundryResource.properties.customSubDomainName}.services.ai.azure.com/api/projects/${aiFoundryProjectName}'
-              : '${aiFoundryResource.properties.endpoint}api/projects/default-project'
+            value: 'https://${aiFoundryResource.properties.customSubDomainName}.services.ai.azure.com/api/projects/aifoundry-voicelab-${resourceToken}-project'
           }
           {
             name: 'MODEL_DEPLOYMENT_NAME'
@@ -238,7 +222,7 @@ module voicelab 'br/public:avm/res/app/container-app:0.8.0' = {
           }
           {
             name: 'AZURE_AI_PROJECT_NAME'
-            value: !empty(aiFoundryProjectName) ? aiFoundryProjectName : 'default-project'
+            value: 'aifoundry-voicelab-${resourceToken}-project'
           }
           {
             name: 'SUBSCRIPTION_ID'
@@ -253,24 +237,20 @@ module voicelab 'br/public:avm/res/app/container-app:0.8.0' = {
             value: useFoundryAgents ? 'true' : 'false'
           }
           {
-            name: 'BING_GROUNDING_RESOURCE_KEY'
-            secretRef: 'bing-grounding-api-key'
-          }
-          {
-            name: 'BING_GROUNDING_RESOURCE_NAME'
-            value: !empty(bingGroundingResourceName) ? bingGroundingResourceName : 'not-set'
-          }
-          {
-            name: 'BING_GROUNDING_CONFIG_ID'
-            value: ''
-          }
-          {
-            name: 'VOICE_NAME'
+            name: 'AZURE_VOICE_NAME'
             value: 'ar-SA-ZariyahNeural'
           }
           {
-            name: 'SPEECH_LANGUAGE'
-            value: 'ar-SA'
+            name: 'AZURE_SPEECH_LANGUAGE'
+            value: 'ar-SA,en-US'
+          }
+          {
+            name: 'AZURE_AVATAR_CHARACTER'
+            value: 'lisa'
+          }
+          {
+            name: 'AZURE_AVATAR_STYLE'
+            value: 'casual-sitting'
           }
           {
             name: 'PORT'
@@ -352,10 +332,7 @@ output SERVICE_VOICELAB_URI string = 'https://${voicelab.outputs.fqdn}'
 output AZURE_TENANT_ID string = subscription().tenantId
 output AZURE_SUBSCRIPTION_ID string = subscription().subscriptionId
 output VOICELAB_IDENTITY_PRINCIPAL_ID string = voicelabIdentity.outputs.principalId
-output PROJECT_ENDPOINT string = !empty(aiFoundryProjectName) 
-  ? 'https://${aiFoundryResource.properties.customSubDomainName}.services.ai.azure.com/api/projects/${aiFoundryProjectName}'
-  : '${aiFoundryResource.properties.endpoint}api/projects/default-project'
+output PROJECT_ENDPOINT string = 'https://${aiFoundryResource.properties.customSubDomainName}.services.ai.azure.com/api/projects/aifoundry-voicelab-${resourceToken}-project'
 output AZURE_OPENAI_ENDPOINT string = aiFoundryResource.properties.endpoint
 output AZURE_SPEECH_REGION string =  location
 output AI_FOUNDRY_RESOURCE_NAME string = aiFoundryResource.name
-output BING_GROUNDING_RESOURCE_NAME string = bingGroundingResourceName
