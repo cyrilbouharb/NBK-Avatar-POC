@@ -1,13 +1,6 @@
 # NBK Banking Avatar - Quick Deployment Guide
 
-## Prerequisites
-
-- Azure subscription
-- Azure Developer CLI (`azd`) [Install here](https://aka.ms/azd-install)
-
-## 1. Deploy with One Command
-
-**From the project directory:**
+## Deploy Everything Automatically
 
 ```bash
 cd voicelive-api-salescoach
@@ -15,75 +8,140 @@ azd auth login
 azd up
 ```
 
-**That's it!** The deployment automatically creates:
-- ✅ Azure AI Services (for GPT-4o)
-- ✅ Azure Speech Services (for Avatar voice)
-- ✅ Container App with your application
-- ✅ All environment variables configured
+**That's it! Everything is deployed and configured automatically:**
+- ✅ Resource Group
+- ✅ Azure AI Services (GPT-4o models deployed)
+- ✅ Azure Speech Services (Arabic voice ready)
+- ✅ Container Registry
+- ✅ Container App
+- ✅ All environment variables set
+- ✅ Application running at the provided URL
 
-## 2. (Optional) Add Bing Grounding
+**No manual environment variable setup needed!**
 
-**Only if you want NBK website content grounding:**
+---
 
-### PowerShell:
+## Optional: Add AI Foundry Project & Agent (Advanced)
+
+**Only do this if you want to use Azure AI Agents instead of direct OpenAI calls.**
+
+By default, the app uses direct OpenAI API calls (`USE_AZURE_AI_AGENTS=false`). This works fine.
+
+If you want to use AI Foundry Agents:
+
+### 1. Create AI Foundry Project (Portal)
+1. Go to [AI Foundry Portal](https://ai.azure.com)
+2. Create a new project in your AI Services resource
+3. Note the Project Name
+
+### 2. Create an Agent (Portal)
+1. In your AI Foundry project, go to **Agents**
+2. Create a new agent
+3. Copy the Agent ID (starts with `asst_`)
+
+### 3. Set Environment Variables
+
+**PowerShell:**
 ```powershell
-# Set your Bing API key (get from Azure Portal)
-azd env set BING_GROUNDING_RESOURCE_KEY "your-bing-key-here"
-azd env set BING_GROUNDING_RESOURCE_NAME "your-bing-resource-name"
-
-# Redeploy
-azd up
+azd env set AI_FOUNDRY_PROJECT_NAME "your-project-name"
+azd env set AGENT_ID "asst_xxxxxxxxxxxxx"
+azd env set USE_AZURE_AI_AGENTS "true"
+azd deploy
 ```
 
-### Bash:
+**Bash:**
 ```bash
-# Set your Bing API key (get from Azure Portal)
-azd env set BING_GROUNDING_RESOURCE_KEY "your-bing-key-here"
+azd env set AI_FOUNDRY_PROJECT_NAME "your-project-name"
+azd env set AGENT_ID "asst_xxxxxxxxxxxxx"
+azd env set USE_AZURE_AI_AGENTS "true"
+azd deploy
+```
+
+---
+
+## Optional: Add Bing Grounding for NBK Website
+
+**Only do this if you want the avatar to reference NBK website content.**
+
+### 1. Create Bing Resource (Portal)
+1. Azure Portal → Create Resource → Search "Bing"
+2. Create Bing Custom Search or Bing Grounding resource
+3. Note the resource name and get the API key
+
+### 2. Set Environment Variables
+
+**PowerShell:**
+```powershell
 azd env set BING_GROUNDING_RESOURCE_NAME "your-bing-resource-name"
-
-# Redeploy
-azd up
+azd env set BING_GROUNDING_RESOURCE_KEY "your-bing-api-key"
+azd deploy
 ```
 
-## 3. Access Your Application
-
-After deployment completes, you'll see:
+**Bash:**
+```bash
+azd env set BING_GROUNDING_RESOURCE_NAME "your-bing-resource-name"
+azd env set BING_GROUNDING_RESOURCE_KEY "your-bing-api-key"
+azd deploy
 ```
-SUCCESS: Your application is running at: https://voicelab.xxxxx.azurecontainerapps.io/
-```
 
-Click the URL and start chatting with the avatar!
+---
 
-## Essential Environment Variables (Auto-Configured)
+## What Gets Auto-Configured by `azd up`
 
-These are **automatically set** by `azd up` - you don't need to configure them:
+| Resource/Setting | Auto-Created? | Auto-Configured? |
+|------------------|---------------|------------------|
+| Resource Group | ✅ Yes | ✅ Yes |
+| Azure AI Services | ✅ Yes | ✅ Yes |
+| GPT-4o Deployment | ✅ Yes | ✅ Yes |
+| Speech Services | ✅ Yes | ✅ Yes |
+| Container Registry | ✅ Yes | ✅ Yes |
+| Container App | ✅ Yes | ✅ Yes |
+| All API Keys | ✅ Yes | ✅ Yes |
+| Arabic Voice | ✅ Yes | ✅ Yes |
+| Bilingual Support | ✅ Yes | ✅ Yes |
+| Avatar Character | ✅ Yes | ✅ Yes |
+| **AI Foundry Project** | ❌ No | ❌ Manual (optional) |
+| **Agent ID** | ❌ No | ❌ Manual (optional) |
+| **Bing Grounding** | ❌ No | ❌ Manual (optional) |
 
-| Variable | Purpose | Auto-Set? |
-|----------|---------|-----------|
-| `AZURE_OPENAI_ENDPOINT` | AI Services endpoint | ✅ Yes |
-| `AZURE_OPENAI_API_KEY` | AI Services key | ✅ Yes |
-| `AZURE_SPEECH_KEY` | Speech Services key | ✅ Yes |
-| `AZURE_SPEECH_REGION` | Speech region | ✅ Yes |
-| `MODEL_DEPLOYMENT_NAME` | GPT model name | ✅ Yes (gpt-4o) |
-| `AZURE_VOICE_NAME` | Avatar voice | ✅ Yes (ar-SA-ZariyahNeural) |
-| `AZURE_SPEECH_LANGUAGE` | Languages | ✅ Yes (ar-SA,en-US) |
-| `AZURE_AVATAR_CHARACTER` | Avatar character | ✅ Yes (lisa) |
-| `AZURE_AVATAR_STYLE` | Avatar style | ✅ Yes (casual-sitting) |
+---
 
-## Optional: Customize Voice/Language
+## Summary: What You Need to Set Manually
+
+**For basic deployment (recommended):**
+- **Nothing!** Just run `azd up`
+
+**For AI Foundry Agents (optional):**
+- `AI_FOUNDRY_PROJECT_NAME`
+- `AGENT_ID`
+- `USE_AZURE_AI_AGENTS=true`
+
+**For Bing Grounding (optional):**
+- `BING_GROUNDING_RESOURCE_NAME`
+- `BING_GROUNDING_RESOURCE_KEY`
+
+**Everything else is automatic!**
+
+---
+
+**Everything else is automatic!**
+
+---
+
+## Optional: Customize Voice/Language (Advanced)
 
 ### Change to English Voice
 
 **PowerShell:**
 ```powershell
 azd env set AZURE_VOICE_NAME "en-US-AvaMultilingualNeural"
-azd up
+azd deploy
 ```
 
 **Bash:**
 ```bash
 azd env set AZURE_VOICE_NAME "en-US-AvaMultilingualNeural"
-azd up
+azd deploy
 ```
 
 ### Change Avatar Character
@@ -92,108 +150,69 @@ azd up
 ```powershell
 azd env set AZURE_AVATAR_CHARACTER "jeff"
 azd env set AZURE_AVATAR_STYLE "business"
-azd up
+azd deploy
 ```
 
 **Bash:**
 ```bash
 azd env set AZURE_AVATAR_CHARACTER "jeff"
 azd env set AZURE_AVATAR_STYLE "business"
-azd up
+azd deploy
 ```
 
-Available avatars: `lisa`, `jeff`, `anna`, `ryan`
-Available styles: `casual-sitting`, `business`, `technical-sitting`
+Available: `lisa`, `jeff`, `anna`, `ryan` | Styles: `casual-sitting`, `business`, `technical-sitting`
+
+---
 
 ## Testing
 
-1. Open the application URL
-2. Click microphone button
-3. Speak in Arabic or English
-4. The avatar responds with voice and animation
+Open the application URL from `azd up` output and click the microphone.
 
-**Arabic test:**
-```
-"مرحبا، أريد معلومات عن البنك الوطني"
-```
+**Arabic:** "مرحبا، أريد معلومات عن البنك الوطني"
+**English:** "Hello, tell me about NBK services"
 
-**English test:**
-```
-"Hello, tell me about NBK services"
-```
+---
 
 ## Troubleshooting
 
-### Check if resources were created
+### Verify Resources Were Created
 
 **PowerShell:**
 ```powershell
 $RG = azd env get-value AZURE_RESOURCE_GROUP_NAME
-az cognitiveservices account list --resource-group $RG --query "[].{Name:name, Kind:kind, Status:properties.provisioningState}" -o table
+az cognitiveservices account list --resource-group $RG -o table
 ```
 
 **Bash:**
 ```bash
 RG=$(azd env get-value AZURE_RESOURCE_GROUP_NAME)
-az cognitiveservices account list --resource-group $RG --query "[].{Name:name, Kind:kind, Status:properties.provisioningState}" -o table
+az cognitiveservices account list --resource-group $RG -o table
 ```
 
-You should see:
-- ✅ AIServices (Status: Succeeded)
-- ✅ SpeechServices (Status: Succeeded)
+Should show:
+- ✅ AIServices (Succeeded)
+- ✅ SpeechServices (Succeeded)
 
-### View application logs
+### View Logs
 
-**PowerShell:**
-```powershell
-azd logs
-```
-
-**Bash:**
 ```bash
 azd logs
 ```
 
-### Redeploy if needed
+### Redeploy
 
-**PowerShell/Bash:**
 ```bash
 azd deploy
 ```
 
-## Cost Estimate
-
-- **Development/Testing:** ~$10-30/month
-- **Production (moderate use):** ~$100-300/month
-
-Costs depend on:
-- GPT-4o usage (per token)
-- Speech synthesis (per character)
-- Avatar video streaming (per minute)
+---
 
 ## Clean Up
 
-**Remove all resources:**
-
-**PowerShell/Bash:**
 ```bash
 azd down
 ```
 
 ---
 
-## That's It!
-
-The deployment is designed to be simple:
-1. Run `azd up`
-2. Everything is configured automatically
-3. Start using the avatar
-
-No manual environment variable configuration needed unless you want Bing grounding or customization.
-
----
-
-**Support:**
-- View deployment status: [Azure Portal](https://portal.azure.com)
-- Check logs: `azd logs`
-- Redeploy: `azd deploy`
+**That's it! No manual environment setup unless you want AI Foundry Agents or Bing Grounding.**
