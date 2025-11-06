@@ -268,19 +268,19 @@ module voicelab 'br/public:avm/res/app/container-app:0.8.0' = {
           }
           {
             name: 'AZURE_VOICE_NAME'
-            value: 'ar-SA-ZariyahNeural'
+            value: 'en-US-AndrewMultilingualNeural'
           }
           {
             name: 'AZURE_SPEECH_LANGUAGE'
-            value: 'ar-SA,en-US'
+            value: 'en-US,ar-SA'
           }
           {
             name: 'AZURE_AVATAR_CHARACTER'
-            value: 'lisa'
+            value: 'andrew'
           }
           {
             name: 'AZURE_AVATAR_STYLE'
-            value: 'casual-sitting'
+            value: 'business'
           }
           {
             name: 'PORT'

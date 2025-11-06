@@ -20,6 +20,9 @@
       "useFoundryAgents": {
         "value": true
       },
+      "agentId": {
+        "value": "${AGENT_ID=}"
+      },
       "bingGroundingResourceName": {
         "value": "${BING_GROUNDING_RESOURCE_NAME=}"
       },

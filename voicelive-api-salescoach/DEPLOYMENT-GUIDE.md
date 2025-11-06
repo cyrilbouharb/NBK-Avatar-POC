@@ -11,7 +11,7 @@ azd up
 **That's it! Everything is deployed and configured automatically:**
 - ✅ Resource Group
 - ✅ Azure AI Services (GPT-4o models deployed)
-- ✅ Azure Speech Services (Arabic voice ready)
+- ✅ Azure Speech Services (English voice ready)
 - ✅ Container Registry
 - ✅ Container App
 - ✅ All environment variables set
@@ -21,39 +21,47 @@ azd up
 
 ---
 
-## Optional: Add AI Foundry Project & Agent (Advanced)
+## Required: Set Agent ID
 
-**Only do this if you want to use Azure AI Agents instead of direct OpenAI calls.**
+After deployment, you need to set the Agent ID in the container app:
 
-By default, the app uses direct OpenAI API calls (`USE_AZURE_AI_AGENTS=false`). This works fine.
+**PowerShell:**
+```powershell
+$APP_NAME = azd env get-value AZURE_CONTAINER_APP_NAME
+$RESOURCE_GROUP = "rg-$(azd env get-value AZURE_ENV_NAME)"
+$AGENT_ID = "asst_xxxxxxxxxxxxx"  # Replace with your actual Agent ID
 
-If you want to use AI Foundry Agents:
+az containerapp update --name $APP_NAME --resource-group $RESOURCE_GROUP --set-env-vars "AGENT_ID=$AGENT_ID"
+```
 
-### 1. Create AI Foundry Project (Portal)
-1. Go to [AI Foundry Portal](https://ai.azure.com)
-2. Create a new project in your AI Services resource
-3. Note the Project Name
+**Bash:**
+```bash
+APP_NAME=$(azd env get-value AZURE_CONTAINER_APP_NAME)
+RESOURCE_GROUP="rg-$(azd env get-value AZURE_ENV_NAME)"
+AGENT_ID="asst_xxxxxxxxxxxxx"  # Replace with your actual Agent ID
 
-### 2. Create an Agent (Portal)
-1. In your AI Foundry project, go to **Agents**
-2. Create a new agent
-3. Copy the Agent ID (starts with `asst_`)
+az containerapp update --name $APP_NAME --resource-group $RESOURCE_GROUP --set-env-vars "AGENT_ID=$AGENT_ID"
+```
 
-### 3. Set Environment Variables
+---
+
+## Optional: Add AI Foundry Project (Advanced)
+
+**Only do this if you created a custom AI Foundry project.**
+
+By default, the app uses the auto-created AI Services resource.
+
+### Set AI Foundry Project Name
 
 **PowerShell:**
 ```powershell
 azd env set AI_FOUNDRY_PROJECT_NAME "your-project-name"
-azd env set AGENT_ID "asst_xxxxxxxxxxxxx"
-azd env set USE_AZURE_AI_AGENTS "true"
 azd deploy
 ```
 
 **Bash:**
 ```bash
 azd env set AI_FOUNDRY_PROJECT_NAME "your-project-name"
-azd env set AGENT_ID "asst_xxxxxxxxxxxxx"
-azd env set USE_AZURE_AI_AGENTS "true"
 azd deploy
 ```
 
@@ -97,26 +105,24 @@ azd deploy
 | Container Registry | ✅ Yes | ✅ Yes |
 | Container App | ✅ Yes | ✅ Yes |
 | All API Keys | ✅ Yes | ✅ Yes |
-| Arabic Voice | ✅ Yes | ✅ Yes |
+| English Voice (Andrew) | ✅ Yes | ✅ Yes |
 | Bilingual Support | ✅ Yes | ✅ Yes |
 | Avatar Character | ✅ Yes | ✅ Yes |
+| **Agent ID** | ❌ No | ⚠️ Manual update required |
 | **AI Foundry Project** | ❌ No | ❌ Manual (optional) |
-| **Agent ID** | ❌ No | ❌ Manual (optional) |
 | **Bing Grounding** | ❌ No | ❌ Manual (optional) |
 
 ---
 
 ## Summary: What You Need to Set Manually
 
-**For basic deployment (recommended):**
-- **Nothing!** Just run `azd up`
+**Required after first deployment:**
+- `AGENT_ID` - Update container app with `az containerapp update`
 
-**For AI Foundry Agents (optional):**
-- `AI_FOUNDRY_PROJECT_NAME`
-- `AGENT_ID`
-- `USE_AZURE_AI_AGENTS=true`
+**Optional for AI Foundry:**
+- `AI_FOUNDRY_PROJECT_NAME` (if using custom project)
 
-**For Bing Grounding (optional):**
+**Optional for Bing Grounding:**
 - `BING_GROUNDING_RESOURCE_NAME`
 - `BING_GROUNDING_RESOURCE_KEY`
 
@@ -124,13 +130,9 @@ azd deploy
 
 ---
 
-**Everything else is automatic!**
-
----
-
 ## Optional: Customize Voice/Language (Advanced)
 
-### Change to English Voice
+### Change Voice
 
 **PowerShell:**
 ```powershell
@@ -148,19 +150,17 @@ azd deploy
 
 **PowerShell:**
 ```powershell
-azd env set AZURE_AVATAR_CHARACTER "jeff"
-azd env set AZURE_AVATAR_STYLE "business"
+azd env set AZURE_AVATAR_CHARACTER "lisa"
+azd env set AZURE_AVATAR_STYLE "casual-sitting"
 azd deploy
 ```
 
 **Bash:**
 ```bash
-azd env set AZURE_AVATAR_CHARACTER "jeff"
-azd env set AZURE_AVATAR_STYLE "business"
+azd env set AZURE_AVATAR_CHARACTER "lisa"
+azd env set AZURE_AVATAR_STYLE "casual-sitting"
 azd deploy
 ```
-
-Available: `lisa`, `jeff`, `anna`, `ryan` | Styles: `casual-sitting`, `business`, `technical-sitting`
 
 ---
 
@@ -168,8 +168,8 @@ Available: `lisa`, `jeff`, `anna`, `ryan` | Styles: `casual-sitting`, `business`
 
 Open the application URL from `azd up` output and click the microphone.
 
-**Arabic:** "مرحبا، أريد معلومات عن البنك الوطني"
 **English:** "Hello, tell me about NBK services"
+**Arabic:** "مرحبا، أريد معلومات عن البنك الوطني"
 
 ---
 
@@ -179,13 +179,15 @@ Open the application URL from `azd up` output and click the microphone.
 
 **PowerShell:**
 ```powershell
-$RG = azd env get-value AZURE_RESOURCE_GROUP_NAME
+$APP_NAME = azd env get-value AZURE_CONTAINER_APP_NAME
+$RG = "rg-$(azd env get-value AZURE_ENV_NAME)"
 az cognitiveservices account list --resource-group $RG -o table
 ```
 
 **Bash:**
 ```bash
-RG=$(azd env get-value AZURE_RESOURCE_GROUP_NAME)
+APP_NAME=$(azd env get-value AZURE_CONTAINER_APP_NAME)
+RG="rg-$(azd env get-value AZURE_ENV_NAME)"
 az cognitiveservices account list --resource-group $RG -o table
 ```
 
@@ -199,11 +201,29 @@ Should show:
 azd logs
 ```
 
+Or:
+
+```powershell
+az containerapp logs show --name $APP_NAME --resource-group $RG --tail 100
+```
+
 ### Redeploy
 
 ```bash
 azd deploy
 ```
+
+---
+
+## Clean Up
+
+```bash
+azd down
+```
+
+---
+
+**That's it! Start training with your avatar!**
 
 ---
 
