@@ -1,16 +1,19 @@
-# Azure Deployment Guide for Avatar Application
+# Azure Deployment Guide for NBK Avatar Application
 
-This guide documents how to deploy the Avatar application to Azure Container Apps using Azure Developer CLI (`azd`), including all the solutions to common deployment issues.
+This comprehensive guide walks you through deploying the NBK Avatar application to Azure Container Apps from scratch on a brand new Azure subscription.
 
-## Table of Contents
+> **⚠️ CRITICAL**: You must create Azure AI resources FIRST before running `azd up`. The deployment does NOT automatically create AI Foundry or Speech services.
 
-- [Prerequisites](#prerequisites)
-- [Azure Resources Setup](#azure-resources-setup)
-- [Environment Configuration](#environment-configuration)
-- [Deployment Steps](#deployment-steps)
-- [Common Issues and Solutions](#common-issues-and-solutions)
-- [Manual Container App Configuration](#manual-container-app-configuration)
-- [Verification Steps](#verification-steps)
+## Quick Navigation
+
+- [Prerequisites](#prerequisites) - Tools and accounts needed
+- [Step 1: Create Azure AI Resources](#step-1-create-azure-ai-resources) - **DO THIS FIRST**
+- [Step 2: Configure Azure AI Agent](#step-2-configure-azure-ai-agent) - Set up NBK customer service agent
+- [Step 3: Set Environment Variables](#step-3-set-environment-variables) - Configure deployment
+- [Step 4: Deploy Container App](#step-4-deploy-container-app) - Run `azd up`
+- [Step 5: Configure Container App](#step-5-configure-container-app) - **REQUIRED** manual step
+- [Verification](#verification-steps) - Test your deployment
+- [Troubleshooting](#troubleshooting) - Common issues and fixes
 
 ---
 
@@ -18,162 +21,424 @@ This guide documents how to deploy the Avatar application to Azure Container App
 
 ### Required Tools
 
-1. **Azure CLI** (`az`)
-   ```powershell
-   winget install -e --id Microsoft.AzureCLI
-   ```
+Install these tools before starting (estimated time: 10 minutes):
 
-2. **Azure Developer CLI** (`azd`)
-   ```powershell
-   winget install -e --id Microsoft.Azd
-   ```
+**1. Azure CLI**
+```powershell
+# Windows
+winget install -e --id Microsoft.AzureCLI
 
-3. **Docker Desktop** (for local testing)
-   - Download from: https://www.docker.com/products/docker-desktop
+# Verify installation
+az --version
+```
 
-4. **Git**
-   ```powershell
-   winget install -e --id Git.Git
-   ```
+**2. Azure Developer CLI**
+```powershell
+# Windows
+winget install -e --id Microsoft.Azd
 
-### Required Azure Resources
+# Verify installation
+azd version
+```
 
-Before deployment, you need to have or create the following Azure resources:
+**3. Git**
+```powershell
+# Windows
+winget install -e --id Git.Git
 
-1. **Azure AI Foundry Project** (with GPT-4o deployment)
-2. **Azure Speech Service**
-3. **Bing Grounding Resource** (optional, for enhanced search)
-4. **Azure AI Agent** (created in AI Foundry)
+# Verify installation
+git --version
+```
+
+**4. Login to Azure**
+```bash
+# Login with Azure CLI
+az login
+
+# Login with Azure Developer CLI
+azd auth login
+```
+
+### Azure Subscription Requirements
+
+- Active Azure subscription with Owner or Contributor permissions
+- Estimated monthly cost: $50-150 (depending on usage)
+  - Azure AI Services (S0 tier): ~$10-50/month
+  - Speech Services (S0 tier): ~$10-50/month
+  - Container Apps: ~$20-50/month (based on usage)
+  - Container Registry: ~$5/month
+  - Bing Search (optional): ~$5-20/month
 
 ---
 
-## Azure Resources Setup
+## Step 1: Create Azure AI Resources
 
-### 1. Create Azure AI Foundry Project
+> **⚠️ DO THIS BEFORE RUNNING `azd up`**
+> 
+> The `azd up` command deploys Container App infrastructure but does NOT create:
+> - Azure AI Foundry (Cognitive Services)
+> - Speech Service
+> - Azure AI Agent
+> 
+> You must create these manually first.
+
+### 1.1 Set Variables for Your Deployment
+
+Choose unique resource names (they must be globally unique in Azure):
+
+**PowerShell:**
+```powershell
+# Set your preferences
+$RESOURCE_GROUP = "rg-nbk-avatar"
+$LOCATION = "eastus2"  # or your preferred region (use: az account list-locations -o table)
+
+# Generate unique names
+$AI_FOUNDRY_NAME = "aifoundry-nbk-$(Get-Random -Maximum 99999)"
+$SPEECH_SERVICE_NAME = "speech-nbk-$(Get-Random -Maximum 99999)"
+$BING_RESOURCE_NAME = "bing-nbk-$(Get-Random -Maximum 99999)"
+
+# Get subscription ID
+$SUBSCRIPTION_ID = (az account show --query id -o tsv)
+
+# Display values
+Write-Host "=== Your Deployment Configuration ===" -ForegroundColor Cyan
+Write-Host "Resource Group: $RESOURCE_GROUP"
+Write-Host "Location: $LOCATION"
+Write-Host "AI Foundry: $AI_FOUNDRY_NAME"
+Write-Host "Speech Service: $SPEECH_SERVICE_NAME"
+Write-Host "Bing Resource: $BING_RESOURCE_NAME"
+Write-Host "Subscription: $SUBSCRIPTION_ID"
+Write-Host "=====================================" -ForegroundColor Cyan
+```
+
+**Bash/Linux:**
+```bash
+# Set your preferences
+RESOURCE_GROUP="rg-nbk-avatar"
+LOCATION="eastus2"  # or your preferred region (use: az account list-locations -o table)
+
+# Generate unique names
+AI_FOUNDRY_NAME="aifoundry-nbk-$RANDOM"
+SPEECH_SERVICE_NAME="speech-nbk-$RANDOM"
+BING_RESOURCE_NAME="bing-nbk-$RANDOM"
+
+# Get subscription ID
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
+# Display values
+echo "=== Your Deployment Configuration ==="
+echo "Resource Group: $RESOURCE_GROUP"
+echo "Location: $LOCATION"
+echo "AI Foundry: $AI_FOUNDRY_NAME"
+echo "Speech Service: $SPEECH_SERVICE_NAME"
+echo "Bing Resource: $BING_RESOURCE_NAME"
+echo "Subscription: $SUBSCRIPTION_ID"
+echo "====================================="
+```
+
+### 1.2 Create Resource Group
 
 ```bash
-# Set your resource group and location
-RESOURCE_GROUP="rg-avatar-app"
-LOCATION="eastus2"
-AI_FOUNDRY_NAME="aifoundry-avatar-$(openssl rand -hex 6)"
-
-# Create resource group
 az group create --name $RESOURCE_GROUP --location $LOCATION
+```
 
-# Create AI Foundry (Cognitive Services multi-service account)
+**✅ Verify:**
+```bash
+az group show --name $RESOURCE_GROUP
+```
+
+### 1.3 Create Azure AI Foundry (Cognitive Services)
+
+This creates a multi-service Cognitive Services account that includes OpenAI capabilities.
+
+```bash
 az cognitiveservices account create \
   --name $AI_FOUNDRY_NAME \
   --resource-group $RESOURCE_GROUP \
   --kind AIServices \
   --sku S0 \
-  --location $LOCATION
+  --location $LOCATION \
+  --yes
 ```
 
-### 2. Deploy GPT-4o Model
+**⏱️ Expected Time:** 2-3 minutes
 
-1. Go to [Azure AI Foundry Portal](https://ai.azure.com/)
-2. Navigate to your project
-3. Go to **Deployments** → **Create new deployment**
-4. Select **gpt-4o** model
-5. Set deployment name to `gpt-4o`
-6. Deploy with default settings
+**✅ Verify:**
+```bash
+az cognitiveservices account show \
+  --name $AI_FOUNDRY_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query "{Name:name, State:properties.provisioningState, Endpoint:properties.endpoint}" -o table
+```
 
-### 3. Create Speech Service
+Should show: `State: Succeeded`
+
+### 1.4 Deploy GPT-4o Model
+
+> **⚠️ Important:** This step must be done in the Azure AI Foundry portal, not via CLI.
+
+**Steps:**
+1. Open [Azure AI Foundry Portal](https://ai.azure.com/)
+2. Sign in with your Azure account
+3. Click on **Your resources** → Find your AI Foundry resource (created in step 1.3)
+4. Click on the resource to open it
+5. In the left navigation, click **Deployments**
+6. Click **+ Create new deployment**
+7. Configure:
+   - **Model**: Select `gpt-4o`
+   - **Deployment name**: Enter `gpt-4o` (must be exactly this)
+   - **Deployment type**: Standard
+   - **Tokens per Minute Rate Limit**: 10K (or your preferred limit)
+8. Click **Deploy**
+9. **⏱️ Wait 2-5 minutes** for deployment to complete
+
+**✅ Verify:**
+- You should see `gpt-4o` deployment listed with status "Succeeded"
+
+### 1.5 Create Speech Service
 
 ```bash
-SPEECH_SERVICE_NAME="speech-avatar-$(openssl rand -hex 6)"
-
 az cognitiveservices account create \
   --name $SPEECH_SERVICE_NAME \
   --resource-group $RESOURCE_GROUP \
   --kind SpeechServices \
   --sku S0 \
-  --location $LOCATION
+  --location $LOCATION \
+  --yes
 ```
 
-### 4. Create Azure AI Agent
+**⏱️ Expected Time:** 2-3 minutes
 
-1. In Azure AI Foundry Portal, go to your project
-2. Navigate to **Agents** section
-3. Click **Create Agent**
-4. Configure the agent with your requirements
-5. **Save the Agent ID** (format: `asst_xxxxxxxxxxxxxxxxxxxxx`)
+**✅ Verify:**
+```bash
+az cognitiveservices account show \
+  --name $SPEECH_SERVICE_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query "{Name:name, State:properties.provisioningState, Region:location}" -o table
+```
 
-### 5. Create Bing Grounding Resource (Optional)
+Should show: `State: Succeeded`
+
+### 1.6 Create Bing Grounding Resource (Optional but Recommended)
+
+This enables the agent to search NBK's website for accurate information.
 
 ```bash
-BING_RESOURCE_NAME="r-bing-avatar"
-
 az cognitiveservices account create \
   --name $BING_RESOURCE_NAME \
   --resource-group $RESOURCE_GROUP \
   --kind Bing.Search.v7 \
   --sku S1 \
-  --location global
+  --location global \
+  --yes
+```
+
+**⏱️ Expected Time:** 1-2 minutes
+
+**✅ Verify:**
+```bash
+az cognitiveservices account show \
+  --name $BING_RESOURCE_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query "{Name:name, State:properties.provisioningState}" -o table
 ```
 
 ---
 
-## Environment Configuration
+## Step 2: Configure Azure AI Agent
 
-### 1. Initialize Azure Developer CLI
+### 2.1 Create Agent in AI Foundry Portal
+
+**Steps:**
+1. Go to [Azure AI Foundry Portal](https://ai.azure.com/)
+2. Select your AI Foundry resource
+3. In the left navigation, click **Agents**
+4. Click **+ New Agent**
+5. Configure:
+   - **Name**: `NBK Customer Service Agent`
+   - **Deployment**: Select your `gpt-4o` deployment
+   - **Description**: `Professional NBK customer service representative with bilingual support`
+
+### 2.2 Set Agent Instructions
+
+Copy and paste this into the **Instructions** field:
+
+```
+You are a professional customer service representative for NBK (National Bank of Kuwait).
+
+Your role is to:
+- Assist customers with inquiries about NBK banking services and products
+- Provide information about accounts, cards, loans, investments, and digital banking
+- Help customers understand NBK's services using information from the official NBK website
+- Communicate clearly in both Arabic and English
+- Maintain a professional, helpful, and courteous demeanor
+- Ensure customer security by not asking for sensitive personal information
+- Use the Bing Custom Search tool to find accurate information from NBK's public website
+
+Language Support:
+- For Arabic: Use clear Modern Standard Arabic (الفصحى) that Kuwaiti customers will understand easily
+- For English: Use professional but friendly business English
+- Detect and match the customer's preferred language automatically
+
+Important Guidelines:
+- Never ask for account numbers, passwords, PINs, or other sensitive credentials
+- For account-specific inquiries, direct customers to secure channels (NBK app, visit branch, call secure line)
+- Always cite your sources when providing information from NBK website
+- If you're unsure about something, acknowledge it professionally and offer to connect customer with specialized support
+- Be patient and empathetic, especially with customers who may be frustrated or confused
+- Keep responses SHORT and conversational (3 sentences max, as if speaking on phone)
+
+Common Topics You Can Help With:
+- Information about NBK accounts (savings, current, salary accounts)
+- Credit and debit cards (features, benefits, how to apply)
+- Personal loans and financing options
+- Investment products and wealth management services
+- Digital banking (NBK Mobile app, online banking)
+- Branch locations and working hours
+- General banking procedures and requirements
+- Customer service contact information
+
+Remember: You represent NBK's commitment to excellent customer service. Be helpful, professional, and trustworthy.
+```
+
+### 2.3 Add Bing Search Tool (If Using)
+
+1. Click **Add tool**
+2. Select **Bing Custom Search**
+3. Configure:
+   - Resource: Select your Bing resource
+   - Custom Configuration ID: (You'll configure this in Bing Custom Search portal)
+
+### 2.4 Save and Copy Agent ID
+
+1. Click **Create**
+2. **⏱️ Wait 30-60 seconds** for agent to be created
+3. **✅ CRITICAL:** Copy the **Agent ID** - it looks like `asst_xxxxxxxxxxxxxxxxxxxxx`
+4. Save this ID - you'll need it in the next step
+
+**PowerShell:**
+```powershell
+$AGENT_ID = "asst_xxxxxxxxxxxxxxxxxxxxx"  # Replace with your actual Agent ID
+Write-Host "Agent ID saved: $AGENT_ID" -ForegroundColor Green
+```
+
+**Bash:**
+```bash
+AGENT_ID="asst_xxxxxxxxxxxxxxxxxxxxx"  # Replace with your actual Agent ID
+echo "Agent ID saved: $AGENT_ID"
+```
+
+---
+
+## Step 3: Set Environment Variables
+
+### 3.1 Clone Repository
+
+```bash
+# Navigate to your projects directory
+cd ~  # or your preferred directory
+
+# Clone the repository
+git clone <your-repo-url>
+cd "Avatar IP"
+```
+
+### 3.2 Get Resource Endpoints and Keys
+
+**PowerShell:**
+```powershell
+# Get AI Foundry endpoint
+$AI_ENDPOINT = (az cognitiveservices account show `
+  --name $AI_FOUNDRY_NAME `
+  --resource-group $RESOURCE_GROUP `
+  --query properties.endpoint -o tsv)
+
+# Get Speech region
+$SPEECH_REGION = (az cognitiveservices account show `
+  --name $SPEECH_SERVICE_NAME `
+  --resource-group $RESOURCE_GROUP `
+  --query location -o tsv)
+
+# Construct project endpoint
+$PROJECT_NAME = "${AI_FOUNDRY_NAME}-project"
+$PROJECT_ENDPOINT = "${AI_ENDPOINT}api/projects/${PROJECT_NAME}"
+
+# Display for verification
+Write-Host "=== Resource Configuration ===" -ForegroundColor Cyan
+Write-Host "AI Endpoint: $AI_ENDPOINT"
+Write-Host "Speech Region: $SPEECH_REGION"
+Write-Host "Project Endpoint: $PROJECT_ENDPOINT"
+Write-Host "Agent ID: $AGENT_ID"
+Write-Host "==============================" -ForegroundColor Cyan
+```
+
+**Bash:**
+```bash
+# Get AI Foundry endpoint
+AI_ENDPOINT=$(az cognitiveservices account show \
+  --name $AI_FOUNDRY_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query properties.endpoint -o tsv)
+
+# Get Speech region
+SPEECH_REGION=$(az cognitiveservices account show \
+  --name $SPEECH_SERVICE_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query location -o tsv)
+
+# Construct project endpoint
+PROJECT_NAME="${AI_FOUNDRY_NAME}-project"
+PROJECT_ENDPOINT="${AI_ENDPOINT}api/projects/${PROJECT_NAME}"
+
+# Display for verification
+echo "=== Resource Configuration ==="
+echo "AI Endpoint: $AI_ENDPOINT"
+echo "Speech Region: $SPEECH_REGION"
+echo "Project Endpoint: $PROJECT_ENDPOINT"
+echo "Agent ID: $AGENT_ID"
+echo "=============================="
+```
+
+### 3.3 Initialize Azure Developer CLI
 
 ```bash
 cd voicelive-api-salescoach
 azd init
 ```
 
-When prompted:
-- Environment name: Choose a name (e.g., `dev`, `prod`)
-- Subscription: Select your Azure subscription
-- Location: Choose region (e.g., `eastus2`)
+**When prompted:**
+- **Environment name**: `dev` (or your preferred name like `prod`, `staging`)
+- **Subscription**: Select your Azure subscription (should match where you created resources)
+- **Location**: `eastus2` (MUST match the location where you created AI resources)
 
-### 2. Set Environment Variables
+### 3.4 Configure All azd Environment Variables
 
-You need to configure the following environment variables in `azd`:
+Run all these commands to configure your deployment:
 
 ```bash
-# Get your subscription ID
-SUBSCRIPTION_ID=$(az account show --query id -o tsv)
-
-# Get resource endpoints and keys
-AI_FOUNDRY_ENDPOINT=$(az cognitiveservices account show \
-  --name $AI_FOUNDRY_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --query properties.endpoint -o tsv)
-
-SPEECH_REGION=$(az cognitiveservices account show \
-  --name $SPEECH_SERVICE_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --query location -o tsv)
-
-PROJECT_ENDPOINT="${AI_FOUNDRY_ENDPOINT}api/projects/YOUR-PROJECT-NAME"
-
-# Set azd environment variables
+# Core Azure configuration
 azd env set AZURE_SUBSCRIPTION_ID "$SUBSCRIPTION_ID"
 azd env set AZURE_LOCATION "$LOCATION"
 azd env set AZURE_RESOURCE_GROUP "$RESOURCE_GROUP"
 
-# AI Services configuration
-azd env set azureOpenAiEndpoint "$AI_FOUNDRY_ENDPOINT"
+# AI Foundry configuration
+azd env set azureOpenAiEndpoint "$AI_ENDPOINT"
 azd env set projectEndpoint "$PROJECT_ENDPOINT"
 azd env set modelDeploymentName "gpt-4o"
-azd env set azureSpeechRegion "$SPEECH_REGION"
 azd env set azureAiResourceName "$AI_FOUNDRY_NAME"
 azd env set azureAiRegion "$LOCATION"
-azd env set azureAiProjectName "YOUR-PROJECT-NAME"
+azd env set azureAiProjectName "$PROJECT_NAME"
+
+# Speech configuration
+azd env set azureSpeechRegion "$SPEECH_REGION"
+azd env set azureVoiceName "en-US-AndrewMultilingualNeural"
+azd env set azureSpeechLanguage "ar-SA,en-US"
 
 # Agent configuration
 azd env set useAzureAiAgents "true"
-azd env set agentId "YOUR-AGENT-ID"  # From AI Foundry
-
-# Bing Grounding (if using)
-azd env set bingGroundingResourceName "$BING_RESOURCE_NAME"
-azd env set bingGroundingResourceKey "YOUR-BING-KEY"
+azd env set agentId "$AGENT_ID"
 
 # Avatar configuration
-azd env set azureVoiceName "en-US-AndrewMultilingualNeural"
-azd env set azureSpeechLanguage "ar-SA,en-US"
 azd env set azureAvatarCharacter "jeff"
 azd env set azureAvatarStyle "business"
 
@@ -182,319 +447,585 @@ azd env set azureInputTranscriptionModel "azure-speech"
 azd env set azureInputTranscriptionLanguage "ar-SA,en-US"
 azd env set azureInputNoiseReductionType "azure_deep_noise_suppression"
 azd env set azureVoiceType "azure-standard"
+
+# Bing Grounding (if created)
+azd env set bingGroundingResourceName "$BING_RESOURCE_NAME"
 ```
+
+**✅ Verify configuration:**
+```bash
+azd env get-values
+```
+
+You should see all variables listed.
 
 ---
 
-## Deployment Steps
+## Step 4: Deploy Container App
 
-### 1. Verify Project Structure
+> **📝 Note:** This step deploys Container App infrastructure (Container Registry, Container App Environment, Container App, Application Insights). It does NOT create AI services (you already did that in Step 1).
 
-Ensure your `azure.yaml` (in root directory) is correctly configured:
+### 4.1 Run Deployment
 
-```yaml
-name: voicelive-api-salescoach
-metadata:
-  template: voicelive-api-salescoach
-services:
-  voicelab:
-    project: voicelive-api-salescoach/backend
-    language: py
-    host: containerapp
-    docker:
-      path: ../Dockerfile
-      context: ../
-      remoteBuild: true
+```bash
+azd up
 ```
 
-**Critical Points:**
-- `project` must point to `voicelive-api-salescoach/backend` (not just `backend`)
-- `docker.context` must be `../` to include both frontend and backend
-- `remoteBuild: true` for Azure Container Registry build
+**What this does:**
+1. ✅ Provisions Container Registry
+2. ✅ Provisions Container App Environment
+3. ✅ Provisions Container App
+4. ✅ Provisions Application Insights
+5. ✅ Builds Docker image remotely in Azure Container Registry
+6. ✅ Deploys container to Azure Container Apps
 
-### 2. Verify .dockerignore
+**⏱️ Expected Time:** 10-15 minutes (first deployment)
 
-Your `voicelive-api-salescoach/.dockerignore` should exclude unnecessary files:
+**Expected Output:**
+```
+Provisioning Azure resources can take some time...
+  (✓) Completed: Resource group: rg-nbk-avatar
+  (✓) Completed: Container Registry (cr...)
+  (✓) Completed: Container App Environment
+  (✓) Completed: Log Analytics Workspace
+  (✓) Completed: Application Insights
+  (✓) Completed: Container App (voicelab)
 
+Packaging services (azd package)
+  (✓) Completed: Packaging service voicelab
+
+Deploying services (release):
+  (✓) Completed: Deploying service voicelab
+    - Endpoint: https://voicelab.<random-id>.<region>.azurecontainerapps.io
+
+SUCCESS: Your application has been deployed!
+```
+
+### 4.2 Get Deployment Information
+
+```bash
+# Get Container App name
+APP_NAME=$(azd env get-value AZURE_CONTAINER_APPS_NAME)
+
+# Get Container App URL
+APP_URL=$(az containerapp show \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query properties.configuration.ingress.fqdn -o tsv)
+
+echo "Application URL: https://$APP_URL"
+```
+
+**🔗 Save this URL** - you'll use it to access your application.
+
+---
+
+## Step 5: Configure Container App
+
+> **⚠️ CRITICAL STEP - DO NOT SKIP**
+> 
+> The `azd up` command does NOT automatically configure environment variables in the Container App. This is a known limitation. You MUST manually configure them.
+
+### Why This Step is Required
+
+Azure Developer CLI has a limitation where environment variables defined in Bicep templates are not automatically applied to running Container App revisions. After `azd up`, your Container App will have only ~3 default environment variables instead of the 27 required for the Avatar to work.
+
+### 5.1 Get API Keys
+
+**PowerShell:**
+```powershell
+# Get AI Foundry API key
+$AI_KEY = (az cognitiveservices account keys list `
+  --name $AI_FOUNDRY_NAME `
+  --resource-group $RESOURCE_GROUP `
+  --query key1 -o tsv)
+
+# Get Speech API key
+$SPEECH_KEY = (az cognitiveservices account keys list `
+  --name $SPEECH_SERVICE_NAME `
+  --resource-group $RESOURCE_GROUP `
+  --query key1 -o tsv)
+
+# Get Bing key (if created)
+$BING_KEY = (az cognitiveservices account keys list `
+  --name $BING_RESOURCE_NAME `
+  --resource-group $RESOURCE_GROUP `
+  --query key1 -o tsv)
+
+# Verify keys retrieved
+Write-Host "=== API Keys Retrieved ===" -ForegroundColor Cyan
+Write-Host "AI Foundry Key: $($AI_KEY.Substring(0,8))..." -ForegroundColor Green
+Write-Host "Speech Key: $($SPEECH_KEY.Substring(0,8))..." -ForegroundColor Green
+Write-Host "Bing Key: $($BING_KEY.Substring(0,8))..." -ForegroundColor Green
+Write-Host "==========================" -ForegroundColor Cyan
+```
+
+**Bash:**
+```bash
+# Get AI Foundry API key
+AI_KEY=$(az cognitiveservices account keys list \
+  --name $AI_FOUNDRY_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query key1 -o tsv)
+
+# Get Speech API key
+SPEECH_KEY=$(az cognitiveservices account keys list \
+  --name $SPEECH_SERVICE_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query key1 -o tsv)
+
+# Get Bing key (if created)
+BING_KEY=$(az cognitiveservices account keys list \
+  --name $BING_RESOURCE_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query key1 -o tsv)
+
+# Verify keys retrieved
+echo "=== API Keys Retrieved ==="
+echo "AI Foundry Key: ${AI_KEY:0:8}..."
+echo "Speech Key: ${SPEECH_KEY:0:8}..."
+echo "Bing Key: ${BING_KEY:0:8}..."
+echo "=========================="
+```
+
+### 5.2 Set Container App Secrets
+
+```bash
+az containerapp secret set \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --secrets \
+    ai-foundry-api-key="$AI_KEY" \
+    speech-api-key="$SPEECH_KEY" \
+    bing-grounding-api-key="$BING_KEY"
+```
+
+**✅ Verify:**
+```bash
+az containerapp secret list \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query "[].name" -o table
+```
+
+Should show:
+```
+Result
+-----------------------
+ai-foundry-api-key
+speech-api-key
+bing-grounding-api-key
+```
+
+### 5.3 Update Container App with All Environment Variables
+
+> **⚠️ Important:** This command creates a NEW revision of your Container App. The new revision will include all 27 environment variables.
+
+```bash
+az containerapp update \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --set-env-vars \
+    AZURE_OPENAI_ENDPOINT="$AI_ENDPOINT" \
+    PROJECT_ENDPOINT="$PROJECT_ENDPOINT" \
+    MODEL_DEPLOYMENT_NAME="gpt-4o" \
+    AZURE_AI_RESOURCE_NAME="$AI_FOUNDRY_NAME" \
+    AZURE_AI_REGION="$LOCATION" \
+    AZURE_AI_PROJECT_NAME="$PROJECT_NAME" \
+    AZURE_SPEECH_REGION="$SPEECH_REGION" \
+    AZURE_VOICE_NAME="en-US-AndrewMultilingualNeural" \
+    AZURE_SPEECH_LANGUAGE="ar-SA,en-US" \
+    USE_AZURE_AI_AGENTS="true" \
+    AGENT_ID="$AGENT_ID" \
+    AZURE_AVATAR_CHARACTER="jeff" \
+    AZURE_AVATAR_STYLE="business" \
+    AZURE_INPUT_TRANSCRIPTION_MODEL="azure-speech" \
+    AZURE_INPUT_TRANSCRIPTION_LANGUAGE="ar-SA,en-US" \
+    AZURE_INPUT_NOISE_REDUCTION_TYPE="azure_deep_noise_suppression" \
+    AZURE_VOICE_TYPE="azure-standard" \
+    AZURE_AI_FOUNDRY_API_KEY=secretref:ai-foundry-api-key \
+    AZURE_SPEECH_API_KEY=secretref:speech-api-key \
+    BING_GROUNDING_API_KEY=secretref:bing-grounding-api-key \
+    BING_GROUNDING_RESOURCE_NAME="$BING_RESOURCE_NAME"
+```
+
+**⏱️ Expected Time:** 2-3 minutes for new revision to deploy
+
+### 5.4 Verify New Revision Created
+
+```bash
+az containerapp revision list \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query "[].{Name:name, Active:properties.active, Health:properties.healthState, Created:properties.createdTime}" \
+  -o table
+```
+
+**Expected output:**
+```
+Name                        Active    Health    Created
+--------------------------  --------  --------  -------------------------
+voicelab--0000002           True      Healthy   2024-01-15T10:30:00+00:00
+voicelab--0000001           False     Healthy   2024-01-15T10:15:00+00:00
+```
+
+The newest revision should be `Active: True` and `Health: Healthy`.
+
+### 5.5 Wait for Deployment to Complete
+
+```bash
+# Wait 2-3 minutes, then check revision health
+az containerapp revision show \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --revision $(az containerapp revision list --name $APP_NAME --resource-group $RESOURCE_GROUP --query "[?properties.active].name" -o tsv) \
+  --query "{Name:name, Health:properties.healthState, Replicas:properties.replicas}" -o table
+```
+
+Should show: `Health: Healthy`, `Replicas: 1` (or more)
+
+---
+
+## Verification Steps
+
+### 1. Check Application Health Endpoint
+
+```bash
+curl https://$APP_URL/api/config
+```
+
+**Expected Response:**
+```json
+{
+  "azure_openai_endpoint": "https://aifoundry-nbk-xxxxx.openai.azure.com/",
+  "project_endpoint": "https://aifoundry-nbk-xxxxx.openai.azure.com/api/projects/aifoundry-nbk-xxxxx-project",
+  "model_deployment_name": "gpt-4o",
+  "azure_voice_name": "en-US-AndrewMultilingualNeural",
+  "azure_avatar_character": "jeff",
+  "azure_avatar_style": "business",
+  "azure_speech_language": "ar-SA,en-US",
+  "use_azure_ai_agents": true
+}
+```
+
+**✅ If you see this:** Configuration is correct!
+
+**❌ If you see errors:** Check Container App logs (see Troubleshooting section)
+
+### 2. Test Avatar in Browser
+
+1. Open your browser
+2. Navigate to: `https://$APP_URL`
+3. You should see the Avatar application homepage
+4. Click **Start** or **Begin** button
+5. **Expected behavior:**
+   - Avatar character "Jeff" appears (business style)
+   - Microphone access requested
+   - You can speak in Arabic or English
+   - Avatar responds with Andrew Multilingual voice
+
+**Test in Arabic:**
+```
+"مرحبا، أريد معلومات عن حساب التوفير"
+(Hello, I want information about savings accounts)
+```
+
+**Test in English:**
+```
+"Hello, I need help with NBK credit cards"
+```
+
+### 3. Check Container App Logs
+
+```bash
+# Stream live logs
+az containerapp logs show \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --follow
+
+# Or view recent logs
+az containerapp logs show \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --tail 100
+```
+
+**✅ Expected log entries:**
+```
+Starting Flask application...
+Azure OpenAI endpoint configured: https://...
+Speech region configured: eastus2
+Agent ID configured: asst_...
+WebSocket connection established
+```
+
+### 4. Verify All Environment Variables Set
+
+```bash
+az containerapp show \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query "properties.template.containers[0].env" -o table
+```
+
+You should see **27 environment variables** listed (not just 3).
+
+---
+
+## Troubleshooting
+
+### Avatar Not Loading
+
+**Symptoms:**
+- Application loads but no Avatar appears
+- Browser console shows errors
+
+**Solutions:**
+
+**1. Verify all environment variables:**
+```bash
+# Count environment variables
+az containerapp show \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query "properties.template.containers[0].env | length(@)" -o tsv
+```
+
+Should return: `27` or more
+
+**2. Check Container App logs:**
+```bash
+az containerapp logs show \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --tail 50
+```
+
+Look for errors like:
+- `Missing environment variable: AGENT_ID`
+- `Failed to initialize Azure OpenAI client`
+- `Speech service authentication failed`
+
+**3. Verify API keys work:**
+```bash
+# Test AI Foundry endpoint
+curl -X POST "$AI_ENDPOINT/openai/deployments/gpt-4o/chat/completions?api-version=2024-02-15-preview" \
+  -H "api-key: $AI_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"test"}],"max_tokens":10}'
+```
+
+Should return a JSON response (not 401 Unauthorized).
+
+**4. Re-apply environment variables:**
+
+If environment variables are missing, re-run Step 5.3.
+
+---
+
+### Build Failures
+
+**Symptoms:**
+- `azd up` fails during build phase
+- "exec format error" or "platform mismatch"
+
+**Solutions:**
+
+**1. Ensure `remoteBuild: true`:**
+
+Check `azure.yaml` (in root directory):
+```yaml
+services:
+  voicelab:
+    docker:
+      remoteBuild: true  # Must be true
+```
+
+**2. Verify `.dockerignore`:**
+
+Check `voicelive-api-salescoach/.dockerignore` includes:
 ```
 **/node_modules/
 frontend/node_modules/
 backend/venv/
-backend/env/
-backend/.venv/
+backend/__pycache__/
+```
+
+**3. Check Dockerfile has no platform flags:**
+
+In `voicelive-api-salescoach/backend/Dockerfile`, ensure there are NO `--platform` flags:
+```dockerfile
+# ✅ Correct
+FROM node:20-alpine AS frontend-builder
+
+# ❌ Wrong
+FROM --platform=linux/amd64 node:20-alpine AS frontend-builder
+```
+
+---
+
+### Slow Build (15+ minutes)
+
+**Symptoms:**
+- Build context upload takes very long
+- Shows "Sending build context: 289 MB"
+
+**Solution:**
+
+Update `.dockerignore` to exclude `node_modules`:
+
+```bash
+cd voicelive-api-salescoach
+cat > .dockerignore << 'EOF'
+**/node_modules/
+frontend/node_modules/
+backend/venv/
 backend/__pycache__/
 **/__pycache__/
 **/*.pyc
 .git/
 .github/
 .vscode/
-.azuredevops/
 .env
 .env.local
 *.log
+EOF
 ```
 
-**Important:** Use `**/node_modules/` pattern to exclude all node_modules directories recursively.
-
-### 3. Deploy to Azure
-
-```bash
-# From the root directory (Avatar IP/)
-azd up
-```
-
-This command will:
-1. Provision Azure resources (Container Registry, Container App Environment, Container App)
-2. Build the Docker image remotely in Azure Container Registry
-3. Deploy the container to Azure Container Apps
-
-**Expected Duration:** 10-15 minutes for first deployment
+Then re-run `azd up`.
 
 ---
 
-## Common Issues and Solutions
+### "Agent Not Found" or Agent Errors
 
-### Issue 1: "The directory name is invalid" Error
+**Symptoms:**
+- Avatar loads but doesn't respond
+- Logs show "Agent asst_xxx not found"
 
-**Problem:** Docker build fails with directory path error.
+**Solutions:**
 
-**Solution:** Ensure `azure.yaml` has correct project path:
-```yaml
-project: voicelive-api-salescoach/backend  # NOT just "backend"
-```
-
-### Issue 2: "exec format error" (Platform Mismatch)
-
-**Problem:** Container built for wrong architecture (ARM64 vs AMD64).
-
-**Solution:** Azure Container Registry automatically builds for linux/amd64. Do NOT add `--platform` flags to Dockerfile as they cause warnings and are unnecessary with remote build.
-
-### Issue 3: Slow Remote Build (Large Context)
-
-**Problem:** Build context is 289 MB with 33,528 files due to node_modules.
-
-**Solution:** Update `.dockerignore` with proper patterns:
-```
-**/node_modules/
-frontend/node_modules/
-backend/venv/
-```
-
-### Issue 4: Avatar Not Loading After Deployment
-
-**Problem:** Container App deployed successfully but Avatar doesn't appear on website.
-
-**Root Cause:** Environment variables not applied to Container App.
-
-**Solution:** See [Manual Container App Configuration](#manual-container-app-configuration) section below.
-
-### Issue 5: Bicep Deployment Not Updating Container App
-
-**Problem:** Running `azd up` doesn't create new Container App revision with updated environment variables.
-
-**Explanation:** Azure Container Apps may not trigger a new revision when only Bicep-defined environment variables change, especially if the container image hasn't changed.
-
-**Solution:** Use manual `az containerapp update` command (see below).
-
----
-
-## Manual Container App Configuration
-
-If `azd up` completes but the Avatar still doesn't work, you need to manually configure the Container App environment variables and secrets.
-
-### Step 1: Create Secrets
-
+**1. Verify Agent ID is correct:**
 ```bash
-# Get API keys
-SPEECH_KEY=$(az cognitiveservices account keys list \
-  --name $SPEECH_SERVICE_NAME \
+# Get current Agent ID from Container App
+az containerapp show \
+  --name $APP_NAME \
   --resource-group $RESOURCE_GROUP \
-  --query key1 -o tsv)
-
-AI_KEY=$(az cognitiveservices account keys list \
-  --name $AI_FOUNDRY_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --query key1 -o tsv)
-
-BING_KEY=$(az cognitiveservices account keys list \
-  --name $BING_RESOURCE_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --query key1 -o tsv)
-
-# Set secrets in Container App
-az containerapp secret set \
-  --name voicelab \
-  --resource-group $RESOURCE_GROUP \
-  --secrets \
-    "ai-foundry-api-key=$AI_KEY" \
-    "speech-api-key=$SPEECH_KEY" \
-    "bing-grounding-api-key=$BING_KEY"
+  --query "properties.template.containers[0].env[?name=='AGENT_ID'].value" -o tsv
 ```
 
-### Step 2: Update Environment Variables
+**2. List agents in AI Foundry:**
+- Go to https://ai.azure.com/
+- Select your project
+- Go to **Agents**
+- Verify agent exists and copy the correct ID
 
+**3. Update Agent ID if wrong:**
 ```bash
-# Get values from azd environment
-AZURE_OPENAI_ENDPOINT=$(azd env get-values | grep AZURE_OPENAI_ENDPOINT | cut -d'=' -f2 | tr -d '"')
-PROJECT_ENDPOINT=$(azd env get-values | grep PROJECT_ENDPOINT | cut -d'=' -f2 | tr -d '"')
-AGENT_ID=$(azd env get-values | grep AGENT_ID | cut -d'=' -f2 | tr -d '"')
-SPEECH_REGION=$(azd env get-values | grep AZURE_SPEECH_REGION | cut -d'=' -f2 | tr -d '"')
-SUBSCRIPTION_ID=$(azd env get-values | grep AZURE_SUBSCRIPTION_ID | cut -d'=' -f2 | tr -d '"')
+# Set correct Agent ID
+AGENT_ID="asst_xxxxxxxxxxxxxxxxxxxxx"  # Your correct agent ID
 
-# Update Container App with all environment variables
+# Update Container App
 az containerapp update \
-  --name voicelab \
+  --name $APP_NAME \
   --resource-group $RESOURCE_GROUP \
-  --set-env-vars \
-    "AZURE_OPENAI_ENDPOINT=$AZURE_OPENAI_ENDPOINT" \
-    "AZURE_OPENAI_API_KEY=secretref:ai-foundry-api-key" \
-    "PROJECT_ENDPOINT=$PROJECT_ENDPOINT" \
-    "MODEL_DEPLOYMENT_NAME=gpt-4o" \
-    "AZURE_SPEECH_KEY=secretref:speech-api-key" \
-    "AZURE_SPEECH_REGION=$SPEECH_REGION" \
-    "AZURE_AI_RESOURCE_NAME=$AI_FOUNDRY_NAME" \
-    "AZURE_AI_REGION=$LOCATION" \
-    "AZURE_AI_PROJECT_NAME=aifoundry-voicelab-6ng2-project" \
-    "USE_AZURE_AI_AGENTS=true" \
-    "AGENT_ID=$AGENT_ID" \
-    "BING_GROUNDING_RESOURCE_NAME=$BING_RESOURCE_NAME" \
-    "BING_GROUNDING_RESOURCE_KEY=secretref:bing-grounding-api-key" \
-    "BING_GROUNDING_CONFIG_ID=" \
-    "AZURE_VOICE_NAME=en-US-AndrewMultilingualNeural" \
-    "AZURE_SPEECH_LANGUAGE=ar-SA,en-US" \
-    "AZURE_AVATAR_CHARACTER=jeff" \
-    "AZURE_AVATAR_STYLE=business" \
-    "AZURE_INPUT_TRANSCRIPTION_MODEL=azure-speech" \
-    "AZURE_INPUT_TRANSCRIPTION_LANGUAGE=ar-SA,en-US" \
-    "AZURE_INPUT_NOISE_REDUCTION_TYPE=azure_deep_noise_suppression" \
-    "AZURE_VOICE_TYPE=azure-standard" \
-    "SUBSCRIPTION_ID=$SUBSCRIPTION_ID" \
-    "RESOURCE_GROUP_NAME=$RESOURCE_GROUP"
+  --set-env-vars AGENT_ID="$AGENT_ID"
 ```
-
-**Note:** This command creates a new Container App revision with all environment variables properly configured.
 
 ---
 
-## Verification Steps
+### Resources Not in Same Region
 
-### 1. Check Container App Revisions
+**Symptoms:**
+- Higher latency
+- Errors about cross-region communication
 
+**Solution:**
+
+Ensure all resources are in the same region:
 ```bash
-az containerapp revision list \
-  --name voicelab \
+# Check all resource locations
+az resource list \
   --resource-group $RESOURCE_GROUP \
-  --query "[].{Name:name, Created:properties.createdTime, Active:properties.active}" \
-  -o table
+  --query "[].{Name:name, Location:location}" -o table
 ```
 
-You should see a new revision created after the manual update.
+All should show the same location (e.g., `eastus2`).
 
-### 2. Verify Environment Variables
+---
 
+### Cost Concerns
+
+**Monitor costs:**
 ```bash
-az containerapp show \
-  --name voicelab \
-  --resource-group $RESOURCE_GROUP \
-  --query "properties.template.containers[0].env[].name" \
-  -o tsv
+# View cost analysis (requires billing reader role)
+az consumption usage list \
+  --start-date 2024-01-01 \
+  --end-date 2024-01-31
 ```
 
-Expected environment variables (27 total):
-- APPLICATIONINSIGHTS_CONNECTION_STRING
-- AZURE_CLIENT_ID
-- PORT
-- AZURE_OPENAI_ENDPOINT
-- AZURE_OPENAI_API_KEY
-- PROJECT_ENDPOINT
-- MODEL_DEPLOYMENT_NAME
-- AZURE_SPEECH_KEY
-- AZURE_SPEECH_REGION
-- AZURE_AI_RESOURCE_NAME
-- AZURE_AI_REGION
-- AZURE_AI_PROJECT_NAME
-- USE_AZURE_AI_AGENTS
-- AGENT_ID
-- BING_GROUNDING_RESOURCE_NAME
-- BING_GROUNDING_RESOURCE_KEY
-- BING_GROUNDING_CONFIG_ID
-- AZURE_VOICE_NAME
-- AZURE_SPEECH_LANGUAGE
-- AZURE_AVATAR_CHARACTER
-- AZURE_AVATAR_STYLE
-- AZURE_INPUT_TRANSCRIPTION_MODEL
-- AZURE_INPUT_TRANSCRIPTION_LANGUAGE
-- AZURE_INPUT_NOISE_REDUCTION_TYPE
-- AZURE_VOICE_TYPE
-- SUBSCRIPTION_ID
-- RESOURCE_GROUP_NAME
+**Reduce costs:**
+1. **Scale down Container App:**
+   ```bash
+   az containerapp update \
+     --name $APP_NAME \
+     --resource-group $RESOURCE_GROUP \
+     --min-replicas 0 \
+     --max-replicas 1
+   ```
 
-### 3. Check Avatar Configuration
+2. **Use lower SKU tiers** (for dev/test):
+   - AI Services: S0 → F0 (free tier, limited)
+   - Speech: S0 → F0 (free tier, limited)
 
-```bash
-az containerapp show \
-  --name voicelab \
-  --resource-group $RESOURCE_GROUP \
-  --query "properties.template.containers[0].env[?name=='AZURE_VOICE_NAME' || name=='AZURE_AVATAR_CHARACTER' || name=='AZURE_AVATAR_STYLE' || name=='AZURE_SPEECH_LANGUAGE'].{Name:name,Value:value}" \
-  -o table
-```
+---
 
-Expected output:
-```
-Name                    Value
-----------------------  ------------------------------
-AZURE_VOICE_NAME        en-US-AndrewMultilingualNeural
-AZURE_SPEECH_LANGUAGE   ar-SA,en-US
-AZURE_AVATAR_CHARACTER  jeff
-AZURE_AVATAR_STYLE      business
-```
+## Deployment Checklist
 
-### 4. Check Application Logs
+Use this checklist for future deployments:
 
-```bash
-az containerapp logs show \
-  --name voicelab \
-  --resource-group $RESOURCE_GROUP \
-  --tail 30
-```
+- [ ] **Prerequisites Installed**
+  - [ ] Azure CLI (`az`)
+  - [ ] Azure Developer CLI (`azd`)
+  - [ ] Git
+  - [ ] Logged in (`az login` and `azd auth login`)
 
-Look for these success indicators:
-```
-pre-configured Azure AI Foundry agent: asst_xxxxxxxxxxxxxxxxxxxxx
-initialized with Azure AI Agent Service support
-initialized with endpoint: https://...
-scenarios loaded: 4
-evaluation scenarios loaded: 4
-Voice Live Demo on http://0.0.0.0:8000
-```
+- [ ] **Step 1: Azure Resources Created (BEFORE azd up)**
+  - [ ] Resource Group created
+  - [ ] Azure AI Foundry (Cognitive Services) created
+  - [ ] GPT-4o model deployed in AI Foundry
+  - [ ] Speech Service created
+  - [ ] (Optional) Bing resource created
+  - [ ] All resources in same region
 
-### 5. Test API Endpoint
+- [ ] **Step 2: Azure AI Agent Configured**
+  - [ ] Agent created in AI Foundry portal
+  - [ ] NBK instructions added
+  - [ ] Agent ID copied
 
-```bash
-# Get Container App URL
-CONTAINER_APP_URL=$(az containerapp show \
-  --name voicelab \
-  --resource-group $RESOURCE_GROUP \
-  --query properties.configuration.ingress.fqdn \
-  -o tsv)
+- [ ] **Step 3: Environment Variables Set**
+  - [ ] Repository cloned
+  - [ ] `azd init` completed
+  - [ ] All 15+ `azd env set` commands run
+  - [ ] `azd env get-values` verified
 
-# Test config endpoint
-curl https://$CONTAINER_APP_URL/api/config
-```
+- [ ] **Step 4: Container App Deployed**
+  - [ ] `azd up` completed successfully
+  - [ ] Container App created
+  - [ ] Application URL obtained
 
-Expected response:
-```json
-{"proxy_enabled":true,"ws_endpoint":"/ws/voice"}
-```
+- [ ] **Step 5: Manual Configuration**
+  - [ ] API keys retrieved
+  - [ ] Container App secrets set
+  - [ ] All 27 environment variables configured
+  - [ ] New revision created and healthy
 
-### 6. Access the Application
-
-Open your browser and navigate to:
-```
-https://<your-container-app-url>
-```
-
-The Avatar (jeff character with business style) should appear and respond with Andrew Multilingual voice in both Arabic and English.
+- [ ] **Verification**
+  - [ ] `/api/config` endpoint returns correct values
+  - [ ] Avatar loads in browser
+  - [ ] Voice recognition works (Arabic & English)
+  - [ ] Agent responds correctly
+  - [ ] No errors in logs
 
 ---
 
@@ -502,103 +1033,152 @@ The Avatar (jeff character with business style) should appear and respond with A
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Azure Container Apps                      │
-│                                                               │
+│                     Azure Cloud                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │              Container App: voicelab                  │  │
-│  │                                                        │  │
-│  │  ┌──────────────┐  ┌──────────────┐                 │  │
-│  │  │   Frontend   │  │   Backend    │                 │  │
-│  │  │ (React/Vite) │  │ (Flask/Python)│                 │  │
-│  │  └──────────────┘  └──────────────┘                 │  │
-│  │                                                        │  │
-│  │  Environment Variables:                               │  │
-│  │  - AZURE_OPENAI_ENDPOINT                             │  │
-│  │  - AGENT_ID                                          │  │
-│  │  - AZURE_VOICE_NAME                                  │  │
-│  │  - AZURE_AVATAR_CHARACTER                            │  │
-│  │  + 23 more...                                        │  │
+│  │       Azure Container App (voicelab)                 │  │
+│  │  ┌────────────────────────────────────────────────┐  │  │
+│  │  │  Frontend: React + TypeScript + Vite           │  │  │
+│  │  │  Backend: Python Flask + WebSocket             │  │  │
+│  │  │  Container: Multi-stage Docker build           │  │  │
+│  │  └────────────────────────────────────────────────┘  │  │
+│  │         Listens on: https://<app>.azurecontainerapps │  │
 │  └──────────────────────────────────────────────────────┘  │
+│                           │                                 │
+│                           │ API Calls                       │
+│                           ▼                                 │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │     Azure AI Foundry (AIServices)                    │  │
+│  │  - GPT-4o Deployment (chat completions)             │  │
+│  │  - Azure OpenAI API                                  │  │
+│  │  - Agent Framework (asst_xxx)                        │  │
+│  │  Endpoint: https://<foundry>.openai.azure.com/       │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                           │                                 │
+│                           │ Speech API                      │
+│                           ▼                                 │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │       Azure Speech Service                           │  │
+│  │  - Speech-to-Text (ar-SA, en-US)                    │  │
+│  │  - Text-to-Speech (Andrew Multilingual)             │  │
+│  │  - Avatar Synthesis (jeff, business style)          │  │
+│  │  Region: eastus2 (or your selected region)          │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                           │                                 │
+│                           │ Search API (Optional)           │
+│                           ▼                                 │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │       Bing Custom Search (optional)                  │  │
+│  │  - Web grounding for NBK info                        │  │
+│  │  - Configured for nbk.com domain                     │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │       Supporting Infrastructure                      │  │
+│  │  - Container Registry (ACR) - stores Docker images  │  │
+│  │  - Application Insights - monitoring & logs          │  │
+│  │  - Log Analytics - log aggregation                   │  │
+│  │  - Container App Environment - networking            │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
 └─────────────────────────────────────────────────────────────┘
-                            │
-            ┌───────────────┼───────────────┐
-            │               │               │
-            ▼               ▼               ▼
-    ┌──────────────┐ ┌────────────┐ ┌────────────┐
-    │ Azure AI     │ │   Speech   │ │   Bing     │
-    │ Foundry      │ │  Service   │ │ Grounding  │
-    │              │ │            │ │            │
-    │ - GPT-4o     │ │ - Andrew   │ │ - Search   │
-    │ - Agent      │ │   Voice    │ │   API      │
-    └──────────────┘ └────────────┘ └────────────┘
 ```
 
 ---
 
-## Summary of Critical Configuration
+## Next Steps After Deployment
 
-### Files That Must Be Correct
+### 1. Configure Bing Custom Search (If Using)
 
-1. **azure.yaml** (root directory)
-   - `project: voicelive-api-salescoach/backend`
-   - `docker.context: ../`
-   - `remoteBuild: true`
+1. Go to [Bing Custom Search Portal](https://www.customsearch.ai/)
+2. Create new instance
+3. Add trusted domains:
+   - `nbk.com`
+   - `www.nbk.com`
+4. Get Custom Configuration ID
+5. Add to agent tools in AI Foundry portal
 
-2. **.dockerignore** (voicelive-api-salescoach/)
-   - Must exclude `**/node_modules/`
-   - Must exclude `backend/venv/`
-
-3. **Bicep files** (infra/)
-   - `main.bicep` must accept existing resource parameters
-   - `resources.bicep` must configure all environment variables
-   - **Note:** May require manual Container App update
-
-### Environment Variables Checklist
-
-Essential variables that MUST be set:
-- ✅ AZURE_OPENAI_ENDPOINT
-- ✅ AZURE_OPENAI_API_KEY (as secretRef)
-- ✅ PROJECT_ENDPOINT
-- ✅ AGENT_ID
-- ✅ AZURE_SPEECH_KEY (as secretRef)
-- ✅ AZURE_SPEECH_REGION
-- ✅ AZURE_VOICE_NAME
-- ✅ AZURE_AVATAR_CHARACTER
-- ✅ AZURE_AVATAR_STYLE
-- ✅ USE_AZURE_AI_AGENTS=true
-
----
-
-## Troubleshooting Commands
+### 2. Set Up Monitoring
 
 ```bash
-# Check if container is running
-az containerapp show --name voicelab --resource-group $RESOURCE_GROUP --query "properties.runningStatus"
+# Enable Application Insights alerts
+az monitor metrics alert create \
+  --name "High Error Rate" \
+  --resource-group $RESOURCE_GROUP \
+  --scopes $(az containerapp show --name $APP_NAME --resource-group $RESOURCE_GROUP --query id -o tsv) \
+  --condition "count requests/failed > 10" \
+  --window-size 5m
+```
 
-# Get container app URL
-az containerapp show --name voicelab --resource-group $RESOURCE_GROUP --query "properties.configuration.ingress.fqdn" -o tsv
+### 3. Configure Custom Domain (Optional)
 
-# Stream logs
-az containerapp logs show --name voicelab --resource-group $RESOURCE_GROUP --follow
+1. Purchase domain or use existing
+2. Add CNAME record pointing to Container App URL
+3. Configure custom domain in Container App:
+   ```bash
+   az containerapp hostname add \
+     --name $APP_NAME \
+     --resource-group $RESOURCE_GROUP \
+     --hostname yourdomain.com
+   ```
 
-# List all revisions
-az containerapp revision list --name voicelab --resource-group $RESOURCE_GROUP -o table
+### 4. Set Up CI/CD (Optional)
 
-# Restart container app
-az containerapp revision restart --name voicelab --resource-group $RESOURCE_GROUP --revision <revision-name>
+Create GitHub Actions workflow for automated deployments:
+
+```yaml
+# .github/workflows/azure-deploy.yml
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Deploy
+        run: azd deploy
 ```
 
 ---
 
-## Support and Additional Resources
+## Additional Resources
 
-- [Azure Container Apps Documentation](https://learn.microsoft.com/en-us/azure/container-apps/)
-- [Azure Developer CLI Documentation](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/)
-- [Azure AI Foundry Documentation](https://learn.microsoft.com/en-us/azure/ai-services/)
-- [Azure Speech Service Documentation](https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/)
+- **Azure Documentation:**
+  - [Container Apps](https://learn.microsoft.com/azure/container-apps/)
+  - [Azure AI Services](https://learn.microsoft.com/azure/ai-services/)
+  - [Speech Service](https://learn.microsoft.com/azure/cognitive-services/speech-service/)
+  - [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/)
+
+- **Project Documentation:**
+  - [Main README](./README.md) - Quick start and overview
+  - [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - Quick reference for common issues
+  - [LOCAL-DEVELOPMENT.md](./LOCAL-DEVELOPMENT.md) - Running locally
+
+- **Community:**
+  - [Azure Container Apps GitHub](https://github.com/microsoft/azure-container-apps)
+  - [Azure AI Foundry Documentation](https://ai.azure.com/docs)
 
 ---
 
-## License
+## Summary: Key Differences from Other Guides
 
-See [LICENSE.md](LICENSE.md) for details.
+This guide is specifically tailored for **fresh Azure subscription deployments** and includes:
+
+1. **✅ Explicit prerequisite creation:** Steps 1-2 MUST be completed BEFORE `azd up`
+2. **✅ Clear separation:** What `azd up` does vs. what you must do manually
+3. **✅ Complete variable list:** All 27 environment variables with explanations
+4. **✅ PowerShell + Bash:** Commands for both Windows and Linux/macOS
+5. **✅ Verification steps:** How to confirm each step succeeded
+6. **✅ Real-world timings:** Expected duration for each operation
+7. **✅ Known limitations:** Explains why manual Step 5 is required
+
+**Most Important:**
+> `azd up` does NOT create AI Foundry or Speech services. You must create them manually first (Steps 1-2), then run `azd up` (Step 4), then manually configure the Container App (Step 5).
