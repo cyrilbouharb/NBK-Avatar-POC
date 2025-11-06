@@ -8,6 +8,16 @@ param voicelabExists bool
 
 param useFoundryAgents bool
 
+@description('Agent ID for Azure AI Agents')
+param agentId string = ''
+
+@description('Bing Grounding resource name')
+param bingGroundingResourceName string = ''
+
+@secure()
+@description('Bing Grounding API key')
+param bingGroundingResourceKey string = ''
+
 @description('Id of the user or app to assign application roles')
 param principalId string
 
@@ -169,6 +179,10 @@ module voicelab 'br/public:avm/res/app/container-app:0.8.0' = {
           name: 'speech-api-key'
           value: speechService.listKeys().key1
         }
+        {
+          name: 'bing-grounding-api-key'
+          value: !empty(bingGroundingResourceKey) ? bingGroundingResourceKey : 'not-set'
+        }
       ]
     }
     containers: [
@@ -235,6 +249,22 @@ module voicelab 'br/public:avm/res/app/container-app:0.8.0' = {
           {
             name: 'USE_AZURE_AI_AGENTS'
             value: useFoundryAgents ? 'true' : 'false'
+          }
+          {
+            name: 'AGENT_ID'
+            value: agentId
+          }
+          {
+            name: 'BING_GROUNDING_RESOURCE_NAME'
+            value: bingGroundingResourceName
+          }
+          {
+            name: 'BING_GROUNDING_RESOURCE_KEY'
+            secretRef: 'bing-grounding-api-key'
+          }
+          {
+            name: 'BING_GROUNDING_CONFIG_ID'
+            value: ''
           }
           {
             name: 'AZURE_VOICE_NAME'

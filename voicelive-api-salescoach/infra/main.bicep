@@ -20,6 +20,16 @@ param principalType string
 
 param useFoundryAgents bool = false
 
+@description('Agent ID for Azure AI Agents')
+param agentId string = ''
+
+@description('Bing Grounding resource name')
+param bingGroundingResourceName string = ''
+
+@secure()
+@description('Bing Grounding API key')
+param bingGroundingResourceKey string = ''
+
 // Tags that should be applied to all resources.
 //
 // Note that 'azd-service-name' tags should be applied separately to service host resources.
@@ -46,6 +56,9 @@ module resources 'resources.bicep' = {
     principalType: principalType
     voicelabExists: voicelabExists
     useFoundryAgents: useFoundryAgents
+    agentId: agentId
+    bingGroundingResourceName: bingGroundingResourceName
+    bingGroundingResourceKey: bingGroundingResourceKey
   }
 }
 
