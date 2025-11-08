@@ -49,7 +49,9 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
 
 5. **Copy the Agent ID** (format: `asst_xxxxxxxxxxxxxxxxxxxxx`)
 
-### 2. Update Container App with Agent ID
+### 2. Update Container App with Agent ID and Enable Agent Mode
+
+**IMPORTANT:** You must set both `AGENT_ID` and `USE_AZURE_AI_AGENTS=true` to use your pre-configured agent.
 
 **PowerShell:**
 ```powershell
@@ -57,7 +59,7 @@ $APP_NAME = azd env get-value AZURE_CONTAINER_APP_NAME
 $RESOURCE_GROUP = "rg-$(azd env get-value AZURE_ENV_NAME)"
 $AGENT_ID = "asst_xxxxxxxxxxxxx"  # Replace with your actual Agent ID
 
-az containerapp update --name $APP_NAME --resource-group $RESOURCE_GROUP --set-env-vars "AGENT_ID=$AGENT_ID"
+az containerapp update --name $APP_NAME --resource-group $RESOURCE_GROUP --set-env-vars "AGENT_ID=$AGENT_ID" "USE_AZURE_AI_AGENTS=true"
 ```
 
 **Bash:**
@@ -66,8 +68,13 @@ APP_NAME=$(azd env get-value AZURE_CONTAINER_APP_NAME)
 RESOURCE_GROUP="rg-$(azd env get-value AZURE_ENV_NAME)"
 AGENT_ID="asst_xxxxxxxxxxxxx"  # Replace with your actual Agent ID
 
-az containerapp update --name $APP_NAME --resource-group $RESOURCE_GROUP --set-env-vars "AGENT_ID=$AGENT_ID"
+az containerapp update --name $APP_NAME --resource-group $RESOURCE_GROUP --set-env-vars "AGENT_ID=$AGENT_ID" "USE_AZURE_AI_AGENTS=true"
 ```
+
+**What this does:**
+- `USE_AZURE_AI_AGENTS=true` tells the application to use your Azure AI Foundry agent
+- `AGENT_ID` specifies which agent to use
+- Without these, the app creates temporary local agents without Bing grounding
 
 ---
 
@@ -135,6 +142,7 @@ azd deploy
 | Bilingual Support | ✅ Yes | ✅ Yes |
 | Avatar Character | ✅ Yes | ✅ Yes |
 | **Agent ID** | ❌ No | ⚠️ Manual update required |
+| **USE_AZURE_AI_AGENTS** | ❌ No | ⚠️ Must set to `true` to use your agent |
 | **AI Foundry Project** | ❌ No | ❌ Manual (optional) |
 | **Bing Grounding** | ❌ No | ❌ Manual (optional) |
 
@@ -144,6 +152,7 @@ azd deploy
 
 **Required after first deployment:**
 - `AGENT_ID` - Update container app with `az containerapp update`
+- `USE_AZURE_AI_AGENTS=true` - **CRITICAL**: Must be set to use your Azure AI agent with Bing grounding
 
 **Optional for AI Foundry:**
 - `AI_FOUNDRY_PROJECT_NAME` (if using custom project)
