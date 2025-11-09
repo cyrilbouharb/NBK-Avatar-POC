@@ -20,14 +20,14 @@ from src.services.graph_scenario_generator import GraphScenarioGenerator
 from src.services.scenario_utils import determine_scenario_directory
 
 # Constants
-ROLE_PLAY_FILE_SUFFIX = "-role-play.prompt.yml"
-ROLE_PLAY_SUFFIX_REMOVAL = "-role-play.prompt"
-AGENT_ID_PREFIX = "local-agent"
-AZURE_AGENT_NAME_PREFIX = "agent"
-UUID_SHORT_LENGTH = 8
-MAX_RESPONSE_LENGTH_SENTENCES = 3
-SCENARIO_DATA_DIR = "data/scenarios"
-DOCKER_APP_PATH = "/app"
+ROLE_PLAY_FILE_SUFFIX = "-role-play.prompt.yml"  # File naming convention for scenario files
+ROLE_PLAY_SUFFIX_REMOVAL = "-role-play.prompt"  # Suffix to remove when extracting scenario ID
+AGENT_ID_PREFIX = "local-agent"  # Prefix for locally created agents
+AZURE_AGENT_NAME_PREFIX = "agent"  # Prefix for Azure AI agent names
+UUID_SHORT_LENGTH = 8  # Number of characters to use from UUID for unique IDs
+MAX_RESPONSE_LENGTH_SENTENCES = 3  # Maximum number of sentences in agent responses
+SCENARIO_DATA_DIR = "data/scenarios"  # Default directory for scenario files
+DOCKER_APP_PATH = "/app"  # Docker container application path
 
 logger = logging.getLogger(__name__)
 
@@ -40,30 +40,44 @@ class ScenarioManager:
         Initialize the scenario manager.
 
         Args:
-            scenario_dir: Directory containing scenario YAML files
+            scenario_dir: Directory containing scenario YAML files. If None, uses default location.
         """
+        # Determine the correct scenario directory (handles both local and Docker environments)
         self.scenario_dir = determine_scenario_directory(scenario_dir)
+        
+        # Load all predefined scenarios from YAML files
         self.scenarios = self._load_scenarios()
+        
+        # Initialize the Microsoft Graph-based scenario generator for personalized scenarios
         self.graph_generator = GraphScenarioGenerator()
+        
+        # Storage for dynamically generated scenarios (e.g., from Graph API)
         self.generated_scenarios: Dict[str, Any] = {}
 
     def _load_scenarios(self) -> Dict[str, Any]:
         """
-        Load scenarios from YAML files.
+        Load scenarios from YAML files in the scenario directory.
 
         Returns:
-            Dict[str, Any]: Dictionary of scenarios keyed by ID
+            Dict[str, Any]: Dictionary of scenarios keyed by scenario ID
         """
         scenarios: Dict[str, Any] = {}
 
+        # Check if the scenario directory exists
         if not self.scenario_dir.exists():
             logger.warning("Scenarios directory not found: %s", self.scenario_dir)
             return scenarios
 
+        # Iterate through all files matching the role-play pattern
         for file in self.scenario_dir.glob(f"*{ROLE_PLAY_FILE_SUFFIX}"):
+            # Extract the scenario ID from the filename
             scenario_id = self._extract_scenario_id(file)
+            
+            # Load the scenario data from the YAML file
             scenario = self._load_scenario_file(file)
+            
             if scenario:
+                # Store the scenario using its ID as the key
                 scenarios[scenario_id] = scenario
                 logger.info("Loaded scenario: %s", scenario_id)
 
@@ -71,11 +85,29 @@ class ScenarioManager:
         return scenarios
 
     def _extract_scenario_id(self, file: Path) -> str:
-        """Extract scenario ID from filename."""
+        """
+        Extract scenario ID from filename by removing the role-play suffix.
+        
+        Example: "customer-complaint-role-play.prompt.yml" -> "customer-complaint"
+        
+        Args:
+            file: Path object representing the scenario file
+            
+        Returns:
+            str: The extracted scenario ID
+        """
         return file.stem.replace(ROLE_PLAY_SUFFIX_REMOVAL, "")
 
     def _load_scenario_file(self, file: Path) -> Optional[Dict[str, Any]]:
-        """Load a single scenario file."""
+        """
+        Load a single scenario file and parse its YAML content.
+        
+        Args:
+            file: Path to the scenario YAML file
+            
+        Returns:
+            Optional[Dict[str, Any]]: Parsed scenario data or None if loading fails
+        """
         try:
             with open(file, encoding="utf-8") as f:
                 return yaml.safe_load(f)
@@ -85,7 +117,7 @@ class ScenarioManager:
 
     def get_scenario(self, scenario_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get a specific scenario by ID.
+        Get a specific scenario by ID from either predefined or generated scenarios.
 
         Args:
             scenario_id: The scenario identifier
@@ -93,19 +125,22 @@ class ScenarioManager:
         Returns:
             Optional[Dict[str, Any]]: Scenario data or None if not found
         """
+        # First check predefined scenarios
         scenario = self.scenarios.get(scenario_id)
         if scenario:
             return scenario
 
+        # Fall back to dynamically generated scenarios
         return self.generated_scenarios.get(scenario_id)
 
     def list_scenarios(self) -> List[Dict[str, str | bool]]:
         """
-        List all available scenarios.
+        List all available scenarios including predefined and Graph-based options.
 
         Returns:
-            List[Dict[str, str]]: List of scenario summaries
+            List[Dict[str, str | bool]]: List of scenario summaries with id, name, and description
         """
+        # Build list from predefined scenarios
         scenarios: List[Dict[str, str | bool]] = [
             {
                 "id": scenario_id,
@@ -115,6 +150,7 @@ class ScenarioManager:
             for scenario_id, scenario_data in self.scenarios.items()
         ]
 
+        # Add the special Graph API scenario option for personalized training
         scenarios.append(
             {
                 "id": "graph-api",
@@ -128,25 +164,31 @@ class ScenarioManager:
 
     def generate_scenario_from_graph(self, graph_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate a scenario based on Microsoft Graph API data.
+        Generate a personalized scenario based on Microsoft Graph API data.
+        
+        This creates a training scenario dynamically using the user's calendar,
+        emails, and other Microsoft 365 context.
 
         Args:
-            graph_data: The Graph API response data
+            graph_data: The Graph API response data containing user context
 
         Returns:
-            Dict[str, Any]: Generated scenario
+            Dict[str, Any]: Generated scenario with unique ID and training content
         """
+        # Use the graph generator to create a scenario from the data
         scenario = self.graph_generator.generate_scenario_from_graph(graph_data)
 
+        # Store the generated scenario for later retrieval
         self.generated_scenarios[scenario["id"]] = scenario
 
         return scenario
 
 
 class AgentManager:
-    """Manages virtual training agents."""
+    """Manages virtual training agents for NBK Banking customer service scenarios."""
 
-    # Base instructions for NBK Banking Customer Service Avatar
+    # Base instructions shared by all NBK Banking customer service agents
+    # These define the core behavior, tone, and constraints for the AI agent
     BASE_INSTRUCTIONS = f"""
 
 CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
@@ -166,22 +208,45 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
     """
 
     def __init__(self):
-        """Initialize the agent manager."""
+        """
+        Initialize the agent manager.
+        
+        Sets up Azure credentials, determines whether to use Azure AI Agent Service
+        or local instruction-based approach, and initializes the project client if needed.
+        """
+        # Storage for agent configurations indexed by agent ID
         self.agents: Dict[str, Dict[str, Any]] = {}
+        
+        # Azure credential for authentication with Azure services
         self.credential = DefaultAzureCredential()
+        
+        # Flag to determine if using Azure AI Agent Service or local approach
         self.use_azure_ai_agents = config["use_azure_ai_agents"]
+        
+        # Initialize Azure AI Project client (if applicable)
         self.project_client = self._initialize_project_client()
+        
+        # Log the initialization mode for debugging
         self._log_initialization_status()
 
     def _log_initialization_status(self) -> None:
-        """Log the initialization status of the agent manager."""
+        """
+        Log the initialization status to help with debugging and monitoring.
+        """
         if self.use_azure_ai_agents:
             logger.info("AgentManager initialized with Azure AI Agent Service support")
         else:
             logger.info("AgentManager initialized with instruction-based approach only")
 
     def _initialize_project_client(self) -> Optional[AIProjectClient]:
-        """Initialize the Azure AI Project client."""
+        """
+        Initialize the Azure AI Project client for agent management.
+        
+        Returns None if using pre-configured agents or if project endpoint is not available.
+        
+        Returns:
+            Optional[AIProjectClient]: Initialized client or None
+        """
         # For existing Azure AI Foundry agents, we don't need the project client
         # The agent already exists and will be accessed via the Voice Live API
         if self.use_azure_ai_agents:
@@ -197,6 +262,7 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
                 logger.warning("PROJECT_ENDPOINT not configured - falling back to instruction-based approach")
                 return None
 
+            # Create the Azure AI Project client with credentials
             client = AIProjectClient(
                 endpoint=project_endpoint,
                 credential=self.credential,
@@ -209,11 +275,14 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
 
     def create_agent(self, scenario_id: str, scenario_data: Dict[str, Any]) -> str:
         """
-        Create a new virtual agent for a scenario.
+        Create a new virtual agent for a specific training scenario.
+        
+        This method extracts scenario instructions, combines them with base instructions,
+        and creates either an Azure AI agent or a local agent configuration.
 
         Args:
             scenario_id: The scenario identifier
-            scenario_data: The scenario configuration data
+            scenario_data: The scenario configuration data including instructions and model parameters
 
         Returns:
             str: The created agent's ID
@@ -221,14 +290,18 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
         Raises:
             Exception: If agent creation fails
         """
-
+        # Extract scenario-specific instructions from the scenario data
         scenario_instructions = scenario_data.get("messages", [{}])[0].get("content", "")
+        
+        # Combine scenario instructions with base NBK customer service guidelines
         combined_instructions = scenario_instructions + self.BASE_INSTRUCTIONS
 
+        # Extract model configuration from scenario or use defaults
         model_name = scenario_data.get("model", config["model_deployment_name"])
         temperature = scenario_data.get("modelParameters", {}).get("temperature", 0.7)
         max_tokens = scenario_data.get("modelParameters", {}).get("max_tokens", 2000)
 
+        # Create either Azure AI agent or local agent based on configuration
         if self.use_azure_ai_agents and self.project_client:
             return self._create_azure_agent(scenario_id, combined_instructions, model_name, temperature, max_tokens)
         return self._create_local_agent(scenario_id, combined_instructions, model_name, temperature, max_tokens)
@@ -241,8 +314,25 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
         temperature: float,
         max_tokens: int,
     ) -> str:
-        """Use existing Azure AI Agent Service agent configured in Azure AI Foundry."""
+        """
+        Use existing Azure AI Agent Service agent configured in Azure AI Foundry.
+        
+        This method doesn't create a new agent but rather references a pre-configured
+        agent in Azure AI Foundry that was set up manually.
 
+        Args:
+            scenario_id: The scenario identifier
+            instructions: Combined agent instructions
+            model: Model deployment name
+            temperature: Sampling temperature for generation
+            max_tokens: Maximum tokens in response
+
+        Returns:
+            str: The agent ID from configuration
+
+        Raises:
+            ValueError: If AGENT_ID is not configured
+        """
         # Use the existing agent ID from configuration
         agent_id = config.get("agent_id", "")
         
@@ -252,7 +342,7 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
 
         logger.info("Using existing Azure AI agent: %s for scenario: %s", agent_id, scenario_id)
 
-        # Store the agent configuration
+        # Store the agent configuration for reference
         self.agents[agent_id] = self._create_agent_config(
             scenario_id=scenario_id,
             agent_id=agent_id,
@@ -273,10 +363,30 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
         temperature: float,
         max_tokens: int,
     ) -> str:
-        """Create a local agent configuration without Azure AI Agent Service."""
+        """
+        Create a local agent configuration without Azure AI Agent Service.
+        
+        This approach stores agent configuration locally and uses direct API calls
+        to the model instead of the Azure AI Agent Service.
+
+        Args:
+            scenario_id: The scenario identifier
+            instructions: Combined agent instructions
+            model: Model deployment name
+            temperature: Sampling temperature for generation
+            max_tokens: Maximum tokens in response
+
+        Returns:
+            str: The generated local agent ID
+
+        Raises:
+            Exception: If agent configuration creation fails
+        """
         try:
+            # Generate a unique local agent ID
             agent_id = self._generate_local_agent_id(scenario_id)
 
+            # Create and store the agent configuration
             self.agents[agent_id] = self._create_agent_config(
                 scenario_id=scenario_id,
                 agent_id=agent_id,
@@ -295,12 +405,32 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
             raise
 
     def _generate_agent_name(self, scenario_id: str) -> str:
-        """Generate a unique agent name."""
+        """
+        Generate a unique agent name for Azure AI agents.
+        
+        Format: "agent-{scenario_id}-{8_char_uuid}"
+
+        Args:
+            scenario_id: The scenario identifier
+
+        Returns:
+            str: Unique agent name
+        """
         short_uuid = uuid.uuid4().hex[:UUID_SHORT_LENGTH]
         return f"{AZURE_AGENT_NAME_PREFIX}-{scenario_id}-{short_uuid}"
 
     def _generate_local_agent_id(self, scenario_id: str) -> str:
-        """Generate a unique local agent ID."""
+        """
+        Generate a unique local agent ID.
+        
+        Format: "local-agent-{scenario_id}-{8_char_uuid}"
+
+        Args:
+            scenario_id: The scenario identifier
+
+        Returns:
+            str: Unique local agent ID
+        """
         short_uuid = uuid.uuid4().hex[:UUID_SHORT_LENGTH]
         return f"{AGENT_ID_PREFIX}-{scenario_id}-{short_uuid}"
 
@@ -314,7 +444,24 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
         temperature: float,
         max_tokens: int,
     ) -> Dict[str, Any]:
-        """Create standardized agent configuration."""
+        """
+        Create standardized agent configuration dictionary.
+        
+        This structure stores all relevant information about an agent including
+        its scenario, instructions, model parameters, and creation metadata.
+
+        Args:
+            scenario_id: The scenario identifier
+            agent_id: The agent identifier
+            is_azure_agent: Whether this is an Azure AI agent or local agent
+            instructions: Combined agent instructions
+            model: Model deployment name
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens in response
+
+        Returns:
+            Dict[str, Any]: Standardized agent configuration
+        """
         result: Dict[str, Any] = {
             "scenario_id": scenario_id,
             "is_azure_agent": is_azure_agent,
@@ -325,6 +472,7 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
             "max_tokens": max_tokens,
         }
 
+        # For Azure agents, store the Azure-specific agent ID
         if is_azure_agent:
             result["azure_agent_id"] = agent_id
 
@@ -338,13 +486,16 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
             agent_id: The agent identifier
 
         Returns:
-            Optional[Dict[str, Any]]: Agent configuration or None if not found
+            Optional[Dict[str, Any]]: Agent configuration dictionary or None if not found
         """
         return self.agents.get(agent_id)
 
     def delete_agent(self, agent_id: str) -> None:
         """
-        Delete an agent.
+        Delete an agent and clean up resources.
+        
+        For Azure AI agents, this attempts to delete the agent from Azure AI Agent Service.
+        For local agents, this only removes the configuration from memory.
 
         Args:
             agent_id: The agent identifier to delete
@@ -353,6 +504,7 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
             if agent_id in self.agents:
                 agent_config = self.agents[agent_id]
 
+                # If this is an Azure AI agent, attempt to delete it from the service
                 if agent_config.get("is_azure_agent") and self.project_client:
                     try:
                         with self.project_client:
@@ -361,6 +513,7 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
                     except Exception as e:
                         logger.error("Error deleting Azure agent: %s", e)
 
+                # Remove the agent configuration from local storage
                 del self.agents[agent_id]
                 logger.info("Deleted agent from local storage: %s", agent_id)
         except Exception as e:
