@@ -207,6 +207,7 @@ class VoiceProxyHandler:
 
             # Build appropriate Azure WebSocket URL based on agent type
             azure_url = self._build_azure_url(agent_id, agent_config)
+            logger.info("Connecting to Azure URL: %s", azure_url)
 
             # Get API key from configuration
             api_key = config.get("azure_openai_api_key")
