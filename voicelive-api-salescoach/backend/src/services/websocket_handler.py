@@ -150,6 +150,10 @@ class VoiceProxyHandler:
         # MOBILE BACKEND MODE: Check if AGENT_ID is pre-configured in environment
         # This is set via Azure Container App environment variable after deploying
         env_agent_id = config.get("agent_id")
+        use_ai_agents = config.get("use_azure_ai_agents")
+        project_name = config.get("azure_ai_project_name")
+        logger.info(f"DEBUG CONFIG: agent_id={env_agent_id}, use_azure_ai_agents={use_ai_agents}, azure_ai_project_name={project_name}")
+        
         if env_agent_id and config.get("use_azure_ai_agents"):
             logger.info("Using pre-configured Azure AI Foundry agent: %s", env_agent_id)
             return env_agent_id
@@ -252,16 +256,25 @@ class VoiceProxyHandler:
         # If global agent_id configured (Azure AI Foundry), add agent-id and project-id
         if config["agent_id"] and config.get("use_azure_ai_agents"):
             project_name = config.get("azure_ai_project_name", "")
+            logger.info(f"DEBUG: agent_id={config['agent_id']}, use_azure_ai_agents={config.get('use_azure_ai_agents')}, project_name={project_name}")
             if project_name:
-                return f"{base_url}&agent-id={config['agent_id']}&project-id={project_name}"
+                azure_url = f"{base_url}&agent-id={config['agent_id']}&project-id={project_name}"
+                logger.info(f"DEBUG: Building Azure URL with project-id: {azure_url}")
+                return azure_url
             else:
-                return f"{base_url}&agent-id={config['agent_id']}"
+                azure_url = f"{base_url}&agent-id={config['agent_id']}"
+                logger.info(f"DEBUG: Building Azure URL WITHOUT project-id: {azure_url}")
+                return azure_url
         # If agent_id without AI Foundry, just add agent-id
         if config["agent_id"]:
-            return f"{base_url}&agent-id={config['agent_id']}"
+            azure_url = f"{base_url}&agent-id={config['agent_id']}"
+            logger.info(f"DEBUG: Building Azure URL (non-Foundry): {azure_url}")
+            return azure_url
         # Fallback to model name from configuration
         model_name = config["model_deployment_name"]
-        return f"{base_url}&model={model_name}"
+        azure_url = f"{base_url}&model={model_name}"
+        logger.info(f"DEBUG: Building Azure URL (model fallback): {azure_url}")
+        return azure_url
 
     def _build_base_azure_url(self) -> str:
         """
