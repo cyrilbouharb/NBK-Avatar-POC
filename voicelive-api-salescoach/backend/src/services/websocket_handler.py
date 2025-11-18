@@ -209,14 +209,22 @@ class VoiceProxyHandler:
             # Build appropriate Azure WebSocket URL based on agent type
             azure_url = self._build_azure_url(agent_id, agent_config)
 
-            # Get API key from configuration
-            api_key = config.get("azure_openai_api_key")
-            if not api_key:
-                logger.error("No API key found in configuration (azure_openai_api_key)")
-                return None
-
-            # Set authentication header
-            headers = {"api-key": api_key}
+            # For Azure AI Foundry agents, use token-based authentication
+            if config.get("use_azure_ai_agents") and config.get("agent_id"):
+                # Get access token using Managed Identity
+                from azure.identity import DefaultAzureCredential
+                credential = DefaultAzureCredential()
+                token = credential.get_token("https://cognitiveservices.azure.com/.default")
+                headers = {"Authorization": f"Bearer {token.token}"}
+                logger.info("Using token-based authentication for Azure AI Foundry agent")
+            else:
+                # Use API key authentication for standard OpenAI models
+                api_key = config.get("azure_openai_api_key")
+                if not api_key:
+                    logger.error("No API key found in configuration (azure_openai_api_key)")
+                    return None
+                headers = {"api-key": api_key}
+                logger.info("Using API key authentication")
 
             # Establish WebSocket connection to Azure
             azure_ws = await websockets.connect(azure_url, additional_headers=headers)
