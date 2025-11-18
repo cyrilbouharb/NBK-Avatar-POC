@@ -249,7 +249,14 @@ class VoiceProxyHandler:
         # If agent config exists, use agent-specific URL construction
         if agent_config:
             return self._build_agent_specific_url(base_url, agent_id, agent_config)
-        # If global agent_id configured, use that
+        # If global agent_id configured (Azure AI Foundry), add agent-id and project-id
+        if config["agent_id"] and config.get("use_azure_ai_agents"):
+            project_name = config.get("azure_ai_project_name", "")
+            if project_name:
+                return f"{base_url}&agent-id={config['agent_id']}&project-id={project_name}"
+            else:
+                return f"{base_url}&agent-id={config['agent_id']}"
+        # If agent_id without AI Foundry, just add agent-id
         if config["agent_id"]:
             return f"{base_url}&agent-id={config['agent_id']}"
         # Fallback to model name from configuration
