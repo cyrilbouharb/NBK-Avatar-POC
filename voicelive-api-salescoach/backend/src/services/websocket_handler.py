@@ -209,22 +209,14 @@ class VoiceProxyHandler:
             # Build appropriate Azure WebSocket URL based on agent type
             azure_url = self._build_azure_url(agent_id, agent_config)
 
-            # For Azure AI Foundry agents, use token-based authentication
-            if config.get("use_azure_ai_agents") and config.get("agent_id"):
-                # Get access token using Managed Identity
-                from azure.identity import DefaultAzureCredential
-                credential = DefaultAzureCredential()
-                token = credential.get_token("https://cognitiveservices.azure.com/.default")
-                headers = {"Authorization": f"Bearer {token.token}"}
-                logger.info("Using token-based authentication for Azure AI Foundry agent")
-            else:
-                # Use API key authentication for standard OpenAI models
-                api_key = config.get("azure_openai_api_key")
-                if not api_key:
-                    logger.error("No API key found in configuration (azure_openai_api_key)")
-                    return None
-                headers = {"api-key": api_key}
-                logger.info("Using API key authentication")
+            # Get API key from configuration
+            api_key = config.get("azure_openai_api_key")
+            if not api_key:
+                logger.error("No API key found in configuration (azure_openai_api_key)")
+                return None
+
+            # Set authentication header
+            headers = {"api-key": api_key}
 
             # Establish WebSocket connection to Azure
             azure_ws = await websockets.connect(azure_url, additional_headers=headers)
@@ -261,29 +253,12 @@ class VoiceProxyHandler:
         # If agent config exists, use agent-specific URL construction
         if agent_config:
             return self._build_agent_specific_url(base_url, agent_id, agent_config)
-        # If global agent_id configured (Azure AI Foundry), add agent-id and agent-project-name
-        if config["agent_id"] and config.get("use_azure_ai_agents"):
-            project_name = config.get("azure_ai_project_name", "")
-            logger.info(f"DEBUG: agent_id={config['agent_id']}, use_azure_ai_agents={config.get('use_azure_ai_agents')}, project_name={project_name}")
-            if project_name:
-                # Azure AI Foundry requires: agent-project-name, agent-id (and possibly agent-access-token)
-                azure_url = f"{base_url}&agent-project-name={project_name}&agent-id={config['agent_id']}"
-                logger.info(f"DEBUG: Building Azure URL with agent-project-name: {azure_url}")
-                return azure_url
-            else:
-                azure_url = f"{base_url}&agent-id={config['agent_id']}"
-                logger.info(f"DEBUG: Building Azure URL WITHOUT agent-project-name: {azure_url}")
-                return azure_url
-        # If agent_id without AI Foundry, just add agent-id
+        # If global agent_id configured, use that
         if config["agent_id"]:
-            azure_url = f"{base_url}&agent-id={config['agent_id']}"
-            logger.info(f"DEBUG: Building Azure URL (non-Foundry): {azure_url}")
-            return azure_url
+            return f"{base_url}&agent-id={config['agent_id']}"
         # Fallback to model name from configuration
         model_name = config["model_deployment_name"]
-        azure_url = f"{base_url}&model={model_name}"
-        logger.info(f"DEBUG: Building Azure URL (model fallback): {azure_url}")
-        return azure_url
+        return f"{base_url}&model={model_name}"
 
     def _build_base_azure_url(self) -> str:
         """
