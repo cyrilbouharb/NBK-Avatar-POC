@@ -122,8 +122,9 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
 
 5. **Save** the agent
 6. **Copy the Agent ID** (format: `asst_xxxxxxxxxxxxxxxxxxxxx`)
+7. **Copy the Project Name** (visible at top of portal or in URL: `https://ai.azure.com/projects/<project-name>/...`)
 
-### Step 2: Configure Backend with Agent ID
+### Step 2: Configure Backend with Agent ID and Project Name
 
 **PowerShell:**
 ```powershell
@@ -131,12 +132,13 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
 $APP_NAME = azd env get-value AZURE_CONTAINER_APP_NAME
 $RESOURCE_GROUP = azd env get-value AZURE_RESOURCE_GROUP
 $AGENT_ID = "asst_xxxxxxxxxxxxx"  # REPLACE with your Agent ID
+$PROJECT_NAME = "your-project-name"  # REPLACE with your AI Foundry Project name
 
 # Update Container App
 az containerapp update `
   --name $APP_NAME `
   --resource-group $RESOURCE_GROUP `
-  --set-env-vars "AGENT_ID=$AGENT_ID" "USE_AZURE_AI_AGENTS=true"
+  --set-env-vars "AGENT_ID=$AGENT_ID" "AZURE_AI_PROJECT_NAME=$PROJECT_NAME" "USE_AZURE_AI_AGENTS=true"
 ```
 
 **Bash:**
@@ -145,12 +147,13 @@ az containerapp update `
 APP_NAME=$(azd env get-value AZURE_CONTAINER_APP_NAME)
 RESOURCE_GROUP=$(azd env get-value AZURE_RESOURCE_GROUP)
 AGENT_ID="asst_xxxxxxxxxxxxx"  # REPLACE with your Agent ID
+PROJECT_NAME="your-project-name"  # REPLACE with your AI Foundry Project name
 
 # Update Container App
 az containerapp update \
   --name "$APP_NAME" \
   --resource-group "$RESOURCE_GROUP" \
-  --set-env-vars "AGENT_ID=$AGENT_ID" "USE_AZURE_AI_AGENTS=true"
+  --set-env-vars "AGENT_ID=$AGENT_ID" "AZURE_AI_PROJECT_NAME=$PROJECT_NAME" "USE_AZURE_AI_AGENTS=true"
 ```
 
 ### Step 3: Verify Agent Configuration
@@ -166,6 +169,7 @@ az containerapp show \
 
 Look for:
 - `AGENT_ID`: Your agent ID should be displayed
+- `AZURE_AI_PROJECT_NAME`: Your project name should be displayed
 - `USE_AZURE_AI_AGENTS`: Should be `true`
 
 ---
@@ -610,13 +614,14 @@ class NBKVoiceClient {
 
 ### Agent Not Responding Correctly
 
-**Problem**: Generic responses, not NBK context
+**Problem**: Generic responses, not NBK context, or "Missing required agent connection string" error
 
 **Solutions**:
 1. Verify agent instructions in Azure AI Foundry Portal
 2. Confirm `USE_AZURE_AI_AGENTS=true` in Container App
 3. Check `AGENT_ID` matches the agent you created
-4. Review agent configuration in portal
+4. **Verify `AZURE_AI_PROJECT_NAME` is set correctly**
+5. Review agent configuration in portal
 
 ---
 
@@ -675,7 +680,7 @@ azd up
 az containerapp update \
   --name "$APP_NAME" \
   --resource-group "$RESOURCE_GROUP" \
-  --set-env-vars "AGENT_ID=<new-agent-id>"
+  --set-env-vars "AGENT_ID=<new-agent-id>" "AZURE_AI_PROJECT_NAME=<project-name>"
 ```
 
 ---
