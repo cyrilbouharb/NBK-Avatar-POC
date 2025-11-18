@@ -226,6 +226,9 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
         # Initialize Azure AI Project client (if applicable)
         self.project_client = self._initialize_project_client()
         
+        # Initialize scenario manager for accessing scenarios
+        self.scenario_manager = ScenarioManager()
+        
         # Log the initialization mode for debugging
         self._log_initialization_status()
 
@@ -518,3 +521,12 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
                 logger.info("Deleted agent from local storage: %s", agent_id)
         except Exception as e:
             logger.error("Error deleting agent %s: %s", agent_id, e)
+    
+    def get_scenario_manager(self) -> ScenarioManager:
+        """
+        Get the scenario manager instance.
+        
+        Returns:
+            ScenarioManager: The scenario manager for accessing scenarios
+        """
+        return self.scenario_manager

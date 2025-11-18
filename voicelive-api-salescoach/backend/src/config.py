@@ -36,6 +36,9 @@ DEFAULT_VOICE_TYPE = "azure-standard"  # Voice synthesis type
 DEFAULT_AVATAR_CHARACTER = "jeff"  # Default avatar character name
 DEFAULT_AVATAR_STYLE = "business"  # Default avatar style/appearance
 
+# Default scenario for mobile backend mode
+DEFAULT_SCENARIO_ID = "nbk-banking"  # Default scenario ID for auto-initialization
+
 
 class Config:
     """Application configuration class.

@@ -1,25 +1,4 @@
-# Frontend builder stage
-FROM node:20-alpine AS frontend-builder
-
-WORKDIR /app
-
-RUN npm config set strict-ssl false
-
-COPY frontend/package*.json ./
-RUN npm ci --legacy-peer-deps --include=dev
-
-COPY frontend/src/ ./src/
-COPY frontend/public/ ./public/
-COPY frontend/index.html ./
-COPY frontend/vite.config.ts ./
-COPY frontend/tsconfig.json ./
-COPY frontend/tsconfig.node.json ./
-COPY frontend/eslint.config.js ./
-COPY frontend/.prettierrc ./
-COPY frontend/.prettierignore ./
-
-RUN npx --yes tsc && npx --yes vite build
-
+# MOBILE BACKEND MODE: Backend-only Docker image without frontend
 # Python runtime stage (using Debian Bullseye to avoid OpenSSL 3 issues with speechsdk)
 FROM python:3.11-slim-bullseye
 
@@ -50,12 +29,11 @@ COPY --chown=app:app backend/src/ ./src/
 COPY --chown=app:app data/scenarios/ ./data/scenarios/
 COPY --chown=app:app data/graph-api-canned.json ./data/
 
-COPY --from=frontend-builder --chown=app:app /app/static/ ./static/
-
 USER app
 EXPOSE 8000
 
+# Health check endpoint updated for mobile backend mode
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api/config || exit 1
+    CMD curl -f http://localhost:8000/api/health || exit 1
 
 CMD ["python", "src/app.py"]

@@ -133,19 +133,44 @@ class VoiceProxyHandler:
 
     async def _get_agent_id_from_client(self, client_ws: simple_websocket.ws.Server) -> Optional[str]:
         """
-        Get agent ID from initial client message.
+        Get agent ID from initial client message or use pre-configured agent.
         
-        Expects the first client message to be a session.update type containing
-        the agent_id in the session configuration. This determines which agent
-        configuration to use for the Azure connection.
+        MOBILE BACKEND MODE:
+        - If AGENT_ID is set in environment (Azure AI Foundry agent), use that directly
+        - Otherwise, auto-create an agent with NBK banking scenario
+        - No longer requires client to send initial session.update message
+        
+        LEGACY MODE (for backwards compatibility):
+        - Still accepts session.update message with agent_id from client
         
         Args:
             client_ws: Client WebSocket connection
             
         Returns:
-            Agent ID string if found, None otherwise
+            Agent ID string (from env, auto-created, or client message)
         """
-
+        from src.config import DEFAULT_SCENARIO_ID
+        
+        # MOBILE BACKEND MODE: Check if AGENT_ID is pre-configured in environment
+        # This is set via Azure Container App environment variable after deploying
+        env_agent_id = config.get("agent_id")
+        if env_agent_id and config.get("use_azure_ai_agents"):
+            logger.info("Using pre-configured Azure AI Foundry agent: %s", env_agent_id)
+            return env_agent_id
+        
+        # MOBILE BACKEND MODE: Auto-create agent with NBK scenario if no env agent configured
+        if not env_agent_id:
+            logger.info("No pre-configured agent found. Auto-creating agent with NBK banking scenario...")
+            scenario = self.agent_manager.get_scenario_manager().get_scenario(DEFAULT_SCENARIO_ID)
+            if scenario:
+                agent_id = self.agent_manager.create_agent(DEFAULT_SCENARIO_ID, scenario)
+                logger.info("Auto-created agent: %s for scenario: %s", agent_id, DEFAULT_SCENARIO_ID)
+                return agent_id
+            else:
+                logger.error("Failed to load NBK scenario: %s", DEFAULT_SCENARIO_ID)
+                return None
+        
+        # LEGACY MODE: Try to receive agent_id from client message (backwards compatibility)
         try:
             # Receive first message synchronously in executor (simple_websocket is sync)
             first_message: str | None = await asyncio.get_event_loop().run_in_executor(
@@ -158,8 +183,9 @@ class VoiceProxyHandler:
                 if msg.get("type") == "session.update":
                     return msg.get("session", {}).get("agent_id")
         except Exception as e:
-            logger.error("Error getting agent ID: %s", e)
-            return None
+            logger.error("Error getting agent ID from client: %s", e)
+            
+        return None
 
     async def _connect_to_azure(self, agent_id: Optional[str]) -> Optional[websockets.asyncio.client.ClientConnection]:
         """
