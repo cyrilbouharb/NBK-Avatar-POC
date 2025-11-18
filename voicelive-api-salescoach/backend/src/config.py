@@ -32,10 +32,6 @@ DEFAULT_INPUT_NOISE_REDUCTION_TYPE = "azure_deep_noise_suppression"  # Noise red
 DEFAULT_VOICE_NAME = "en-US-AndrewMultilingualNeural"  # Azure Neural TTS voice
 DEFAULT_VOICE_TYPE = "azure-standard"  # Voice synthesis type
 
-# Avatar configuration defaults
-DEFAULT_AVATAR_CHARACTER = "jeff"  # Default avatar character name
-DEFAULT_AVATAR_STYLE = "business"  # Default avatar style/appearance
-
 # Default scenario for mobile backend mode
 DEFAULT_SCENARIO_ID = "nbk-banking"  # Default scenario ID for auto-initialization
 
@@ -99,10 +95,6 @@ class Config:
             # Voice synthesis configuration
             "azure_voice_name": os.getenv("AZURE_VOICE_NAME", DEFAULT_VOICE_NAME),  # Azure Neural TTS voice name
             "azure_voice_type": os.getenv("AZURE_VOICE_TYPE", DEFAULT_VOICE_TYPE),  # Voice synthesis type/tier
-            
-            # Avatar configuration
-            "azure_avatar_character": os.getenv("AZURE_AVATAR_CHARACTER", DEFAULT_AVATAR_CHARACTER),  # Avatar character
-            "azure_avatar_style": os.getenv("AZURE_AVATAR_STYLE", DEFAULT_AVATAR_STYLE),  # Avatar style/appearance
             
             # Bing Grounding with Custom Search configuration
             "bing_grounding_resource_key": os.getenv("BING_GROUNDING_RESOURCE_KEY", ""),  # Bing Custom Search API key

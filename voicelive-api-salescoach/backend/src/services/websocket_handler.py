@@ -41,10 +41,6 @@ DEFAULT_TURN_DETECTION_TYPE = "azure_semantic_vad"
 DEFAULT_NOISE_REDUCTION_TYPE = "azure_deep_noise_suppression"
 # Echo cancellation handled server-side to prevent audio feedback loops
 DEFAULT_ECHO_CANCELLATION_TYPE = "server_echo_cancellation"
-# Default avatar character for visual representation
-DEFAULT_AVATAR_CHARACTER = "jeff"
-# Default avatar style/appearance
-DEFAULT_AVATAR_STYLE = "business"
 # Default neural voice for text-to-speech output
 DEFAULT_VOICE_NAME = "en-US-AndrewMultilingualNeural"
 # Voice type - standard Azure neural voices
@@ -325,7 +321,7 @@ class VoiceProxyHandler:
         
         Configures the Azure session with:
         - Audio settings (VAD, noise reduction, echo cancellation)
-        - Voice and avatar settings
+        - Voice settings
         - Transcription settings
         - Agent-specific instructions and parameters (for local agents)
         
@@ -353,7 +349,6 @@ class VoiceProxyHandler:
         - Turn detection (VAD configuration)
         - Audio preprocessing (noise reduction, echo cancellation)
         - Transcription settings
-        - Avatar appearance
         - Voice selection
         
         Returns:
@@ -375,11 +370,6 @@ class VoiceProxyHandler:
                 "input_audio_noise_reduction": {"type": DEFAULT_NOISE_REDUCTION_TYPE},
                 # Enable echo cancellation to prevent feedback
                 "input_audio_echo_cancellation": {"type": DEFAULT_ECHO_CANCELLATION_TYPE},
-                # Configure visual avatar appearance
-                "avatar": {
-                    "character": DEFAULT_AVATAR_CHARACTER,
-                    "style": DEFAULT_AVATAR_STYLE,
-                },
                 # Configure text-to-speech voice
                 "voice": {
                     "name": config["azure_voice_name"],
