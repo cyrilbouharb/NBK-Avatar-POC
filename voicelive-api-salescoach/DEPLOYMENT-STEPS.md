@@ -126,7 +126,7 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
 
 ### Step 2: Configure Backend with Agent ID and Project Name
 
-**PowerShell:**
+**PowerShell (multi-line):**
 ```powershell
 # Get deployment info
 $APP_NAME = azd env get-value AZURE_CONTAINER_APP_NAME
@@ -141,7 +141,12 @@ az containerapp update `
   --set-env-vars "AGENT_ID=$AGENT_ID" "AZURE_AI_PROJECT_NAME=$PROJECT_NAME" "USE_AZURE_AI_AGENTS=true"
 ```
 
-**Bash:**
+**PowerShell (single-line):**
+```powershell
+$APP_NAME = azd env get-value AZURE_CONTAINER_APP_NAME; $RESOURCE_GROUP = azd env get-value AZURE_RESOURCE_GROUP; $AGENT_ID = "asst_xxxxxxxxxxxxx"; $PROJECT_NAME = "your-project-name"; az containerapp update --name $APP_NAME --resource-group $RESOURCE_GROUP --set-env-vars "AGENT_ID=$AGENT_ID" "AZURE_AI_PROJECT_NAME=$PROJECT_NAME" "USE_AZURE_AI_AGENTS=true"
+```
+
+**Bash/Linux (multi-line):**
 ```bash
 # Get deployment info
 APP_NAME=$(azd env get-value AZURE_CONTAINER_APP_NAME)
@@ -154,6 +159,11 @@ az containerapp update \
   --name "$APP_NAME" \
   --resource-group "$RESOURCE_GROUP" \
   --set-env-vars "AGENT_ID=$AGENT_ID" "AZURE_AI_PROJECT_NAME=$PROJECT_NAME" "USE_AZURE_AI_AGENTS=true"
+```
+
+**Bash/Linux (single-line):**
+```bash
+APP_NAME=$(azd env get-value AZURE_CONTAINER_APP_NAME) && RESOURCE_GROUP=$(azd env get-value AZURE_RESOURCE_GROUP) && AGENT_ID="asst_xxxxxxxxxxxxx" && PROJECT_NAME="your-project-name" && az containerapp update --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --set-env-vars "AGENT_ID=$AGENT_ID" "AZURE_AI_PROJECT_NAME=$PROJECT_NAME" "USE_AZURE_AI_AGENTS=true"
 ```
 
 ### Step 3: Verify Agent Configuration
@@ -675,12 +685,19 @@ azd up
 
 ### Update Agent Configuration
 
+**Bash:**
 ```bash
 # No redeployment needed - just update env vars
 az containerapp update \
   --name "$APP_NAME" \
   --resource-group "$RESOURCE_GROUP" \
   --set-env-vars "AGENT_ID=<new-agent-id>" "AZURE_AI_PROJECT_NAME=<project-name>"
+```
+
+**PowerShell:**
+```powershell
+# Single-line version
+az containerapp update --name $APP_NAME --resource-group $RESOURCE_GROUP --set-env-vars "AGENT_ID=<new-agent-id>" "AZURE_AI_PROJECT_NAME=<project-name>"
 ```
 
 ---
