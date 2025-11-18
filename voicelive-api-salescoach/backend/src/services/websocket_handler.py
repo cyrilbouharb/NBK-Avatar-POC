@@ -253,17 +253,18 @@ class VoiceProxyHandler:
         # If agent config exists, use agent-specific URL construction
         if agent_config:
             return self._build_agent_specific_url(base_url, agent_id, agent_config)
-        # If global agent_id configured (Azure AI Foundry), add agent-id and project-id
+        # If global agent_id configured (Azure AI Foundry), add agent-id and agent-project-name
         if config["agent_id"] and config.get("use_azure_ai_agents"):
             project_name = config.get("azure_ai_project_name", "")
             logger.info(f"DEBUG: agent_id={config['agent_id']}, use_azure_ai_agents={config.get('use_azure_ai_agents')}, project_name={project_name}")
             if project_name:
-                azure_url = f"{base_url}&agent-id={config['agent_id']}&project-id={project_name}"
-                logger.info(f"DEBUG: Building Azure URL with project-id: {azure_url}")
+                # Azure AI Foundry requires: agent-project-name, agent-id (and possibly agent-access-token)
+                azure_url = f"{base_url}&agent-project-name={project_name}&agent-id={config['agent_id']}"
+                logger.info(f"DEBUG: Building Azure URL with agent-project-name: {azure_url}")
                 return azure_url
             else:
                 azure_url = f"{base_url}&agent-id={config['agent_id']}"
-                logger.info(f"DEBUG: Building Azure URL WITHOUT project-id: {azure_url}")
+                logger.info(f"DEBUG: Building Azure URL WITHOUT agent-project-name: {azure_url}")
                 return azure_url
         # If agent_id without AI Foundry, just add agent-id
         if config["agent_id"]:
