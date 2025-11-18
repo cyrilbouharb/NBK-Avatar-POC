@@ -151,15 +151,13 @@ class VoiceProxyHandler:
         # This is set via Azure Container App environment variable after deploying
         env_agent_id = config.get("agent_id")
         use_ai_agents = config.get("use_azure_ai_agents")
-        project_name = config.get("azure_ai_project_name")
-        logger.info(f"DEBUG CONFIG: agent_id={env_agent_id}, use_azure_ai_agents={use_ai_agents}, azure_ai_project_name={project_name}")
         
-        if env_agent_id and config.get("use_azure_ai_agents"):
+        if env_agent_id and use_ai_agents:
             logger.info("Using pre-configured Azure AI Foundry agent: %s", env_agent_id)
             return env_agent_id
         
         # MOBILE BACKEND MODE: Auto-create agent with NBK scenario if no env agent configured
-        if not env_agent_id:
+        if not env_agent_id and not use_ai_agents:
             logger.info("No pre-configured agent found. Auto-creating agent with NBK banking scenario...")
             scenario = self.agent_manager.get_scenario_manager().get_scenario(DEFAULT_SCENARIO_ID)
             if scenario:
@@ -171,6 +169,7 @@ class VoiceProxyHandler:
                 return None
         
         # LEGACY MODE: Try to receive agent_id from client message (backwards compatibility)
+        # Only do this if no pre-configured agent found
         try:
             # Receive first message synchronously in executor (simple_websocket is sync)
             first_message: str | None = await asyncio.get_event_loop().run_in_executor(
