@@ -205,18 +205,28 @@ class VoiceProxyHandler:
             # Retrieve agent configuration if agent_id provided
             agent_config = self.agent_manager.get_agent(agent_id) if agent_id else None
 
-            # Build appropriate Azure WebSocket URL based on agent type
-            azure_url = self._build_azure_url(agent_id, agent_config)
-            logger.info("Connecting to Azure URL: %s", azure_url)
-
             # Determine authentication method based on whether using Azure AI agents
             use_azure_ai_agents = config.get("use_azure_ai_agents")
+            
+            # Get agent access token if using Azure AI Foundry agents
+            agent_access_token = None
+            if use_azure_ai_agents and config.get("agent_id"):
+                logger.info("Getting agent access token for Azure AI Foundry agent")
+                agent_access_token = await self._get_azure_token(scope="https://ai.azure.com/.default")
+                if not agent_access_token:
+                    logger.error("Failed to obtain agent access token")
+                    return None
+
+            # Build appropriate Azure WebSocket URL based on agent type
+            azure_url = self._build_azure_url(agent_id, agent_config, agent_access_token)
+            logger.info("Connecting to Azure URL: %s", azure_url)
+
             headers = {}
             
             if use_azure_ai_agents and config.get("agent_id"):
                 # Azure AI Foundry agents require Entra ID (Azure AD) token authentication
                 logger.info("Using Azure managed identity authentication for agent mode")
-                token = await self._get_azure_token()
+                token = await self._get_azure_token()  # Uses default cognitiveservices scope
                 if not token:
                     logger.error("Failed to obtain Azure authentication token")
                     return None
@@ -242,7 +252,7 @@ class VoiceProxyHandler:
             logger.error("Failed to connect to Azure: %s", e)
             return None
 
-    async def _get_azure_token(self) -> Optional[str]:
+    async def _get_azure_token(self, scope: str = "https://cognitiveservices.azure.com/.default") -> Optional[str]:
         """
         Get Azure authentication token using managed identity.
         
@@ -251,14 +261,14 @@ class VoiceProxyHandler:
         - Azure CLI credentials (for local development)
         - Environment variables
         
+        Args:
+            scope: The Azure scope for which to request a token
+        
         Returns:
             Access token string or None if authentication fails
         """
         try:
             from azure.identity.aio import DefaultAzureCredential
-            
-            # Scope for Azure AI services
-            scope = "https://cognitiveservices.azure.com/.default"
             
             # Get token using managed identity or other available credentials
             credential = DefaultAzureCredential()
@@ -267,10 +277,10 @@ class VoiceProxyHandler:
             
             return token_result.token
         except Exception as e:
-            logger.error("Failed to obtain Azure token: %s", e)
+            logger.error("Failed to obtain Azure token for scope %s: %s", scope, e)
             return None
 
-    def _build_azure_url(self, agent_id: Optional[str], agent_config: Optional[Dict[str, Any]]) -> str:
+    def _build_azure_url(self, agent_id: Optional[str], agent_config: Optional[Dict[str, Any]], agent_access_token: Optional[str] = None) -> str:
         """
         Build the Azure WebSocket URL.
         
@@ -282,6 +292,7 @@ class VoiceProxyHandler:
         Args:
             agent_id: Optional agent identifier
             agent_config: Optional agent configuration dictionary
+            agent_access_token: Optional agent access token for Azure AI Foundry agents
             
         Returns:
             Complete WebSocket URL for Azure connection
@@ -291,11 +302,14 @@ class VoiceProxyHandler:
 
         # If agent config exists, use agent-specific URL construction
         if agent_config:
-            return self._build_agent_specific_url(base_url, agent_id, agent_config)
+            return self._build_agent_specific_url(base_url, agent_id, agent_config, agent_access_token)
         # If global agent_id configured, use that with agent-project-name
         if config["agent_id"]:
             project_name = config["azure_ai_project_name"]
-            return f"{base_url}&agent-id={config['agent_id']}&agent-project-name={project_name}"
+            url = f"{base_url}&agent-id={config['agent_id']}&agent-project-name={project_name}"
+            if agent_access_token:
+                url += f"&agent-access-token={agent_access_token}"
+            return url
         # Fallback to model name from configuration
         model_name = config["model_deployment_name"]
         return f"{base_url}&model={model_name}"
@@ -331,18 +345,19 @@ class VoiceProxyHandler:
             f"&x-ms-client-request-id={client_request_id}"
         )
 
-    def _build_agent_specific_url(self, base_url: str, agent_id: Optional[str], agent_config: Dict[str, Any]) -> str:
+    def _build_agent_specific_url(self, base_url: str, agent_id: Optional[str], agent_config: Dict[str, Any], agent_access_token: Optional[str] = None) -> str:
         """
         Build URL for specific agent configuration.
         
         Differentiates between:
-        - Azure AI agents: requires agent-id and project-id parameters
+        - Azure AI agents: requires agent-id and agent-project-name parameters
         - Local agents: uses model parameter with specific deployment
         
         Args:
             base_url: Base URL with protocol, domain, endpoint
             agent_id: Agent identifier
             agent_config: Agent configuration containing agent type and settings
+            agent_access_token: Optional agent access token for Azure AI Foundry agents
             
         Returns:
             Complete URL with agent-specific parameters
@@ -350,7 +365,10 @@ class VoiceProxyHandler:
         if agent_config.get("is_azure_agent"):
             # For Azure AI agents, add agent-id and agent-project-name
             project_name = config["azure_ai_project_name"]
-            return f"{base_url}&agent-id={agent_id}&agent-project-name={project_name}"
+            url = f"{base_url}&agent-id={agent_id}&agent-project-name={project_name}"
+            if agent_access_token:
+                url += f"&agent-access-token={agent_access_token}"
+            return url
         # For local agents, use the model parameter
         model_name = agent_config.get("model", config["model_deployment_name"])
         return f"{base_url}&model={model_name}"
