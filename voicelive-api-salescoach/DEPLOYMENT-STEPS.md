@@ -4,6 +4,29 @@
 
 This guide provides step-by-step instructions to deploy the mobile backend and integrate it with your mobile/frontend application.
 
+## ✅ Pre-Deployment Checklist
+
+Before you start, ensure you have:
+- [ ] Azure CLI installed and authenticated (`az login`)
+- [ ] Azure Developer CLI (azd) installed and authenticated (`azd auth login`)
+- [ ] Git installed
+- [ ] Azure subscription with permissions to:
+  - Create resources (Resource Groups, Container Apps, AI Services)
+  - Assign RBAC roles (Azure AI Developer)
+
+## 🔑 Critical Configuration Requirements
+
+After deployment, you **MUST** configure these items:
+
+1. **Create Azure AI Foundry Agent** in the Azure AI Foundry portal
+2. **Update `.azure/<env-name>/.env` file** with:
+   - `AGENT_ID="asst_xxxxx"`
+   - `AZURE_AI_PROJECT_NAME="short-project-name"`
+   - `USE_AZURE_AI_AGENTS="true"`
+3. **Assign Azure AI Developer role** to Container App's managed identity
+4. **Configure Container App environment variables** (can be done via CLI or persisted in .env)
+5. **Frontend code**: Remove manual `input_audio_buffer.commit` calls (server-side VAD handles this)
+
 ---
 
 ## 📋 Prerequisites
@@ -122,9 +145,40 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
 
 5. **Save** the agent
 6. **Copy the Agent ID** (format: `asst_xxxxxxxxxxxxxxxxxxxxx`)
-7. **Copy the Project Name** (visible at top of portal or in URL: `https://ai.azure.com/projects/<project-name>/...`)
+7. **Copy the Project Name** from the Azure AI Foundry portal URL:
+   - Look at the URL: `https://ai.azure.com/projects/<project-name>/...`
+   - The project name is typically the **SHORT NAME** (e.g., `aifoundry-voicelab-ocqb-project`)
+   - **IMPORTANT**: Do NOT use the full resource name. Use the short project name visible in the portal.
 
-### Step 2: Configure Backend with Agent ID and Project Name
+### Step 2: Update Local Environment File (CRITICAL)
+
+Before configuring the Container App, you **MUST** update your local `.azure/<env-name>/.env` file to persist these settings:
+
+1. Locate your environment folder:
+   ```bash
+   cd .azure/<your-env-name>/
+   # Example: .azure/nbk-voicelive-test7/
+   ```
+
+2. Edit the `.env` file and add/update these variables:
+   ```bash
+   AGENT_ID="asst_xxxxxxxxxxxxxxxxxxxxx"  # Your Agent ID from Step 1
+   AZURE_AI_PROJECT_NAME="your-short-project-name"  # Short project name (not full resource name)
+   USE_AZURE_AI_AGENTS="true"
+   ```
+
+   **Example:**
+   ```bash
+   AGENT_ID="asst_yo6tCdSBiaZYl4qqQ8w1TBUu"
+   AZURE_AI_PROJECT_NAME="aifoundry-voicelab-ocqb-project"
+   USE_AZURE_AI_AGENTS="true"
+   ```
+
+3. Save the file
+
+> **Why this matters**: The `.env` file ensures these settings persist across deployments and are automatically loaded by `azd`.
+
+### Step 3: Configure Backend with Agent ID and Project Name
 
 **PowerShell (multi-line):**
 ```powershell
@@ -132,7 +186,7 @@ CRITICAL INTERACTION GUIDELINES FOR NBK BANKING CUSTOMER SERVICE:
 $APP_NAME = azd env get-value AZURE_CONTAINER_APP_NAME
 $RESOURCE_GROUP = azd env get-value AZURE_RESOURCE_GROUP
 $AGENT_ID = "asst_xxxxxxxxxxxxx"  # REPLACE with your Agent ID
-$PROJECT_NAME = "your-project-name"  # REPLACE with your AI Foundry Project name
+$PROJECT_NAME = "your-short-project-name"  # REPLACE with SHORT project name from AI Foundry
 
 # Update Container App
 az containerapp update `
@@ -143,7 +197,7 @@ az containerapp update `
 
 **PowerShell (single-line):**
 ```powershell
-$APP_NAME = azd env get-value AZURE_CONTAINER_APP_NAME; $RESOURCE_GROUP = azd env get-value AZURE_RESOURCE_GROUP; $AGENT_ID = "asst_xxxxxxxxxxxxx"; $PROJECT_NAME = "your-project-name"; az containerapp update --name $APP_NAME --resource-group $RESOURCE_GROUP --set-env-vars "AGENT_ID=$AGENT_ID" "AZURE_AI_PROJECT_NAME=$PROJECT_NAME" "USE_AZURE_AI_AGENTS=true"
+$APP_NAME = azd env get-value AZURE_CONTAINER_APP_NAME; $RESOURCE_GROUP = azd env get-value AZURE_RESOURCE_GROUP; $AGENT_ID = "asst_xxxxxxxxxxxxx"; $PROJECT_NAME = "your-short-project-name"; az containerapp update --name $APP_NAME --resource-group $RESOURCE_GROUP --set-env-vars "AGENT_ID=$AGENT_ID" "AZURE_AI_PROJECT_NAME=$PROJECT_NAME" "USE_AZURE_AI_AGENTS=true"
 ```
 
 **Bash/Linux (multi-line):**
@@ -152,7 +206,7 @@ $APP_NAME = azd env get-value AZURE_CONTAINER_APP_NAME; $RESOURCE_GROUP = azd en
 APP_NAME=$(azd env get-value AZURE_CONTAINER_APP_NAME)
 RESOURCE_GROUP=$(azd env get-value AZURE_RESOURCE_GROUP)
 AGENT_ID="asst_xxxxxxxxxxxxx"  # REPLACE with your Agent ID
-PROJECT_NAME="your-project-name"  # REPLACE with your AI Foundry Project name
+PROJECT_NAME="your-short-project-name"  # REPLACE with SHORT project name from AI Foundry
 
 # Update Container App
 az containerapp update \
@@ -163,13 +217,64 @@ az containerapp update \
 
 **Bash/Linux (single-line):**
 ```bash
-APP_NAME=$(azd env get-value AZURE_CONTAINER_APP_NAME) && RESOURCE_GROUP=$(azd env get-value AZURE_RESOURCE_GROUP) && AGENT_ID="asst_xxxxxxxxxxxxx" && PROJECT_NAME="your-project-name" && az containerapp update --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --set-env-vars "AGENT_ID=$AGENT_ID" "AZURE_AI_PROJECT_NAME=$PROJECT_NAME" "USE_AZURE_AI_AGENTS=true"
+APP_NAME=$(azd env get-value AZURE_CONTAINER_APP_NAME) && RESOURCE_GROUP=$(azd env get-value AZURE_RESOURCE_GROUP) && AGENT_ID="asst_xxxxxxxxxxxxx" && PROJECT_NAME="your-short-project-name" && az containerapp update --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --set-env-vars "AGENT_ID=$AGENT_ID" "AZURE_AI_PROJECT_NAME=$PROJECT_NAME" "USE_AZURE_AI_AGENTS=true"
 ```
 
-### Step 3: Verify Agent Configuration
+### Step 4: Assign Azure AI Developer Role (REQUIRED)
+
+**CRITICAL**: The Container App's managed identity needs the **Azure AI Developer** role to authenticate with Azure AI Foundry agents.
+
+**PowerShell:**
+```powershell
+# Get Container App details
+$APP_NAME = azd env get-value AZURE_CONTAINER_APP_NAME
+$RESOURCE_GROUP = azd env get-value AZURE_RESOURCE_GROUP
+
+# Get the Container App's managed identity principal ID
+$PRINCIPAL_ID = az containerapp show --name $APP_NAME --resource-group $RESOURCE_GROUP --query "identity.principalId" -o tsv
+
+# Get the AI Foundry resource ID (find in Azure Portal or use az resource list)
+$AI_RESOURCE_ID = "/subscriptions/<subscription-id>/resourceGroups/<rg-name>/providers/Microsoft.CognitiveServices/accounts/<ai-foundry-resource-name>"
+
+# Assign Azure AI Developer role
+az role assignment create `
+  --assignee $PRINCIPAL_ID `
+  --role "Azure AI Developer" `
+  --scope $AI_RESOURCE_ID
+```
+
+**Bash/Linux:**
+```bash
+# Get Container App details
+APP_NAME=$(azd env get-value AZURE_CONTAINER_APP_NAME)
+RESOURCE_GROUP=$(azd env get-value AZURE_RESOURCE_GROUP)
+
+# Get the Container App's managed identity principal ID
+PRINCIPAL_ID=$(az containerapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query "identity.principalId" -o tsv)
+
+# Get the AI Foundry resource ID (find in Azure Portal or use az resource list)
+AI_RESOURCE_ID="/subscriptions/<subscription-id>/resourceGroups/<rg-name>/providers/Microsoft.CognitiveServices/accounts/<ai-foundry-resource-name>"
+
+# Assign Azure AI Developer role
+az role assignment create \
+  --assignee "$PRINCIPAL_ID" \
+  --role "Azure AI Developer" \
+  --scope "$AI_RESOURCE_ID"
+```
+
+**Alternative (Azure Portal):**
+1. Go to Azure Portal
+2. Navigate to your **Azure AI Foundry resource** (CognitiveServices account)
+3. Click **Access control (IAM)** → **Add role assignment**
+4. Select role: **Azure AI Developer**
+5. Assign access to: **Managed identity**
+6. Select your Container App's managed identity
+7. Click **Review + assign**
+
+### Step 5: Verify Agent Configuration
 
 ```bash
-# Check environment variables
+# Check environment variables are set correctly
 az containerapp show \
   --name "$APP_NAME" \
   --resource-group "$RESOURCE_GROUP" \
@@ -178,9 +283,49 @@ az containerapp show \
 ```
 
 Look for:
-- `AGENT_ID`: Your agent ID should be displayed
-- `AZURE_AI_PROJECT_NAME`: Your project name should be displayed
+- `AGENT_ID`: Your agent ID should be displayed (e.g., `asst_yo6tCdSBiaZYl4qqQ8w1TBUu`)
+- `AZURE_AI_PROJECT_NAME`: Your **short** project name should be displayed (e.g., `aifoundry-voicelab-ocqb-project`)
 - `USE_AZURE_AI_AGENTS`: Should be `true`
+
+### Step 6: Verify Managed Identity Role Assignment
+
+```bash
+# Check if Azure AI Developer role is assigned
+az role assignment list \
+  --assignee "$PRINCIPAL_ID" \
+  --query "[?roleDefinitionName=='Azure AI Developer'].{Role:roleDefinitionName, Scope:scope}" \
+  --output table
+```
+
+You should see the **Azure AI Developer** role assigned to your AI Foundry resource.
+
+---
+
+## ⚙️ Critical Configuration Summary
+
+### Required Environment Variables in `.azure/<env-name>/.env`
+
+```bash
+# Azure AI Agent Configuration (REQUIRED for agent mode)
+AGENT_ID="asst_xxxxxxxxxxxxxxxxxxxxx"              # Your Azure AI Foundry agent ID
+AZURE_AI_PROJECT_NAME="your-short-project-name"    # Short project name from AI Foundry portal
+USE_AZURE_AI_AGENTS="true"                         # Enable Azure AI Foundry agent mode
+
+# Auto-populated by azd (do not modify manually)
+AI_FOUNDRY_RESOURCE_NAME="aifoundry-voicelab-xxxxx"
+AZURE_CONTAINER_APP_NAME="voicelab"
+AZURE_RESOURCE_GROUP="rg-xxx"
+AZURE_LOCATION="eastus2"
+AZURE_SUBSCRIPTION_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+SERVICE_VOICELAB_URI="https://voicelab.xxx.azurecontainerapps.io"
+```
+
+### Required Azure RBAC Permissions
+
+The Container App's **managed identity** requires:
+- **Azure AI Developer** role on the Azure AI Foundry resource
+  - Allows authentication with Azure AI agents using Entra ID tokens
+  - Required for agent access token (`https://ai.azure.com/.default` scope)
 
 ---
 
@@ -195,6 +340,39 @@ wss://voicelab.orangepebble-97f068fa.eastus2.azurecontainerapps.io/ws/voice
 ```
 
 **Replace with your actual URL from Step 4 above.**
+
+### Important: Server-Side VAD (Voice Activity Detection)
+
+**CRITICAL**: Azure AI Foundry agents use **server-side VAD** which automatically detects when speech ends. Your frontend **MUST NOT** call `input_audio_buffer.commit` manually.
+
+❌ **WRONG** (will cause errors):
+```javascript
+// DON'T DO THIS with Azure AI Foundry agents
+function stopRecording() {
+  audioProcessor.stopRecording();
+  wsClient.commitAudio();  // ❌ This causes an error!
+}
+```
+
+✅ **CORRECT**:
+```javascript
+// Do this instead - let server-side VAD handle turn detection
+function stopRecording() {
+  audioProcessor.stopRecording();
+  // No manual commit needed - server automatically detects speech end
+}
+```
+
+**Why?** The backend configures `turn_detection: { type: "azure_semantic_vad" }` which:
+- Automatically detects when you stop speaking
+- Commits the audio buffer automatically
+- Triggers the agent response
+
+**Error you'll see if you commit manually:**
+```
+input_audio_buffer.commit is not supported when server side VAD is enabled. 
+Server side VAD will automatically commit audio when audio end is detected.
+```
 
 ### Available Endpoints
 
@@ -256,13 +434,25 @@ Stream audio in real-time:
 - Channels: Mono
 - Encoding: Base64
 
-#### 3. Commit Audio (Mobile → Backend)
+**Important**: Continue sending audio chunks while recording. The server-side VAD will automatically detect when speech ends and commit the buffer.
 
-Signal end of user's speech:
+#### 3. ~~Commit Audio~~ (NOT NEEDED - Server-Side VAD Handles This)
 
-```json
+~~```json
 {
   "type": "input_audio_buffer.commit"
+}
+```~~
+
+**⚠️ DO NOT SEND THIS MESSAGE** when using Azure AI Foundry agents. The server automatically commits audio when it detects speech has ended via server-side VAD.
+
+If you send this message, you'll receive an error:
+```json
+{
+  "type": "error",
+  "error": {
+    "message": "input_audio_buffer.commit is not supported when server side VAD is enabled. Server side VAD will automatically commit audio when audio end is detected."
+  }
 }
 ```
 
@@ -373,11 +563,13 @@ function sendAudio(audioBuffer) {
   }));
 }
 
-// Commit audio (end of user speech)
-function commitAudio() {
-  ws.send(JSON.stringify({
-    type: 'input_audio_buffer.commit'
-  }));
+// Stop recording - NO manual commit needed with server-side VAD
+function stopRecording() {
+  // Stop capturing audio
+  stopAudioCapture();
+  
+  // Server-side VAD automatically detects speech end and commits
+  // DO NOT send input_audio_buffer.commit message
 }
 ```
 
@@ -413,12 +605,9 @@ class NBKVoiceClient {
         }
     }
     
-    func commitAudio() {
-        let message: [String: String] = ["type": "input_audio_buffer.commit"]
-        let jsonData = try! JSONSerialization.data(withJSONObject: message)
-        let jsonString = String(data: jsonData, encoding: .utf8)!
-        
-        webSocket?.send(.string(jsonString)) { _ in }
+    func stopRecording() {
+        // Stop audio capture
+        // Server-side VAD automatically commits - no manual commit needed
     }
     
     private func receiveMessage() {
@@ -518,12 +707,9 @@ class NBKVoiceClient {
         webSocket?.send(message.toString())
     }
     
-    fun commitAudio() {
-        val message = JSONObject().apply {
-            put("type", "input_audio_buffer.commit")
-        }
-        
-        webSocket?.send(message.toString())
+    fun stopRecording() {
+        // Stop audio capture
+        // Server-side VAD automatically commits - no manual commit needed
     }
     
     private fun handleMessage(text: String) {
@@ -618,20 +804,48 @@ class NBKVoiceClient {
 
 **Solutions**:
 1. Verify `AGENT_ID` is configured in Container App
-2. Check audio format is PCM16 24kHz mono
-3. Ensure `input_audio_buffer.commit` was sent
-4. Review Container App logs for errors
+2. Verify `AZURE_AI_PROJECT_NAME` is set to the **short project name** (not full resource name)
+3. Verify `USE_AZURE_AI_AGENTS=true` in Container App
+4. Check **Azure AI Developer** role is assigned to Container App's managed identity
+5. Ensure audio format is PCM16 24kHz mono
+6. **DO NOT** send `input_audio_buffer.commit` manually (server-side VAD handles this)
+7. Review Container App logs for authentication errors
+
+### Manual Commit Error
+
+**Problem**: Error saying "input_audio_buffer.commit is not supported"
+
+**Root Cause**: Your frontend is manually calling `input_audio_buffer.commit` when using server-side VAD.
+
+**Solution**: 
+1. Remove all `commitAudio()` or `input_audio_buffer.commit` calls from your frontend code
+2. Let the server-side VAD automatically detect speech end and commit
+3. Simply stop sending audio chunks when user releases the microphone button
+
+### Authentication Errors
+
+**Problem**: "Authentication error to AI Agent service" or "Missing required agent connection string"
+
+**Solutions**:
+1. Verify Container App has **managed identity** enabled
+2. Check **Azure AI Developer** role is assigned to the managed identity
+3. Verify `AGENT_ID` matches your actual agent ID from Azure AI Foundry portal
+4. Verify `AZURE_AI_PROJECT_NAME` is the **short project name**, not the full resource name
+5. Check backend logs for token acquisition errors:
+   ```bash
+   az containerapp logs show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --follow
+   ```
 
 ### Agent Not Responding Correctly
 
-**Problem**: Generic responses, not NBK context, or "Missing required agent connection string" error
+**Problem**: Generic responses, not NBK context, or wrong agent behavior
 
 **Solutions**:
-1. Verify agent instructions in Azure AI Foundry Portal
+1. Verify agent instructions in Azure AI Foundry Portal match the NBK banking instructions
 2. Confirm `USE_AZURE_AI_AGENTS=true` in Container App
 3. Check `AGENT_ID` matches the agent you created
-4. **Verify `AZURE_AI_PROJECT_NAME` is set correctly**
-5. Review agent configuration in portal
+4. Verify `AZURE_AI_PROJECT_NAME` is correct (short project name)
+5. Review agent configuration in portal - ensure model is `gpt-4o`
 
 ---
 
@@ -661,7 +875,85 @@ Access detailed telemetry:
 
 ---
 
-## 🔄 Update and Redeploy
+## � Key Code Fixes for Azure AI Foundry Integration
+
+The following code changes were required to make Azure AI Foundry agents work correctly. These are already implemented in the `mobile-backend-only` branch.
+
+### Backend Changes (`backend/src/services/websocket_handler.py`)
+
+#### 1. Dual-Token Authentication
+Azure AI Foundry agents require **TWO** authentication tokens:
+- **Voice API token**: Scope `https://cognitiveservices.azure.com/.default` (Authorization header)
+- **Agent access token**: Scope `https://ai.azure.com/.default` (query parameter)
+
+```python
+# Get agent access token with ai.azure.com scope
+agent_access_token = await self._get_azure_token(scope="https://ai.azure.com/.default")
+
+# Get voice API token with default cognitiveservices scope
+token = await self._get_azure_token()  # Uses default scope
+headers["Authorization"] = f"Bearer {token}"
+
+# Append agent access token to URL
+if agent_access_token:
+    url += f"&agent-access-token={agent_access_token}"
+```
+
+#### 2. Correct Parameter Name
+Use `agent-project-name` instead of `project-id`:
+
+```python
+# ✅ CORRECT
+url = f"{base_url}&agent-id={agent_id}&agent-project-name={project_name}"
+
+# ❌ WRONG
+# url = f"{base_url}&agent-id={agent_id}&project-id={project_name}"
+```
+
+#### 3. Azure Managed Identity for Authentication
+Use `DefaultAzureCredential` instead of API keys for agent mode:
+
+```python
+from azure.identity.aio import DefaultAzureCredential
+
+async def _get_azure_token(self, scope: str = "https://cognitiveservices.azure.com/.default"):
+    credential = DefaultAzureCredential()
+    token_result = await credential.get_token(scope)
+    await credential.close()
+    return token_result.token
+```
+
+#### 4. Add aiohttp Dependency
+Required for `azure-identity` async operations:
+
+```txt
+# backend/requirements.txt
+aiohttp>=3.9.0
+azure-identity>=1.15.0
+```
+
+### Frontend Changes (All Platforms)
+
+#### Remove Manual Audio Commit
+**DO NOT** send `input_audio_buffer.commit` when using server-side VAD:
+
+```javascript
+// ❌ WRONG - Don't do this
+function stopRecording() {
+  audioProcessor.stopRecording();
+  wsClient.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));  // ❌
+}
+
+// ✅ CORRECT - Let server-side VAD handle it
+function stopRecording() {
+  audioProcessor.stopRecording();
+  // Server automatically detects speech end and commits
+}
+```
+
+---
+
+## �🔄 Update and Redeploy
 
 ### Update Code Only
 
@@ -729,14 +1021,54 @@ For issues:
 
 ## ✅ Quick Reference
 
-| Item | Value |
-|------|-------|
-| **WebSocket Endpoint** | `wss://voicelab.orangepebble-97f068fa.eastus2.azurecontainerapps.io/ws/voice` |
-| **Health Check** | `https://voicelab.orangepebble-97f068fa.eastus2.azurecontainerapps.io/api/health` |
+### Get Your WebSocket URL (PowerShell)
+```powershell
+$SERVICE_URL = (azd env get-value SERVICE_VOICELAB_URI) -replace 'https://', ''
+Write-Host "WebSocket Endpoint: wss://$SERVICE_URL/ws/voice"
+Write-Host "Health Check: https://$SERVICE_URL/api/health"
+```
+
+### Get Your WebSocket URL (Bash)
+```bash
+SERVICE_URL=$(azd env get-value SERVICE_VOICELAB_URI | sed 's|https://||')
+echo "WebSocket Endpoint: wss://$SERVICE_URL/ws/voice"
+echo "Health Check: https://$SERVICE_URL/api/health"
+```
+
+### Configuration Summary
+
+| Item | Value/Location |
+|------|---------------|
+| **WebSocket Endpoint** | `wss://<your-domain>.azurecontainerapps.io/ws/voice` |
+| **Health Check** | `https://<your-domain>.azurecontainerapps.io/api/health` |
 | **Audio Format** | PCM16, 24kHz, Mono, Base64 |
 | **Languages** | English & Arabic (auto-detected) |
 | **Agent Type** | Azure AI Foundry Agent |
+| **Authentication** | Managed Identity (Entra ID) |
 | **Security** | WSS/HTTPS only |
+| **VAD Type** | Server-side (`azure_semantic_vad`) |
+| **Manual Commit** | ❌ NOT allowed (server handles it) |
+
+### Required Environment Variables
+
+Add these to `.azure/<env-name>/.env`:
+
+```bash
+AGENT_ID="asst_xxxxxxxxxxxxxxxxxxxxx"
+AZURE_AI_PROJECT_NAME="your-short-project-name"
+USE_AZURE_AI_AGENTS="true"
+```
+
+### Required RBAC Role
+
+Container App's managed identity needs:
+- **Azure AI Developer** role on Azure AI Foundry resource
+
+### Code Repositories
+
+| Component | Branch | URL |
+|-----------|--------|-----|
+| Backend | `mobile-backend-only` | `https://github.com/cyrilbouharb/NBK-Avatar-POC` |
 
 ---
 
