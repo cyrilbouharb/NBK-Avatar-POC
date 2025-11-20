@@ -192,7 +192,7 @@ class VoiceProxyHandler:
         
         Establishes WebSocket connection to Azure, handling:
         - URL construction based on agent type (Azure AI agent vs OpenAI model)
-        - API key authentication
+        - Authentication (Entra ID for agents, API key for models)
         - Initial session configuration
         
         Args:
@@ -209,14 +209,25 @@ class VoiceProxyHandler:
             azure_url = self._build_azure_url(agent_id, agent_config)
             logger.info("Connecting to Azure URL: %s", azure_url)
 
-            # Get API key from configuration
-            api_key = config.get("azure_openai_api_key")
-            if not api_key:
-                logger.error("No API key found in configuration (azure_openai_api_key)")
-                return None
-
-            # Set authentication header
-            headers = {"api-key": api_key}
+            # Determine authentication method based on whether using Azure AI agents
+            use_azure_ai_agents = config.get("use_azure_ai_agents")
+            headers = {}
+            
+            if use_azure_ai_agents and config.get("agent_id"):
+                # Azure AI Foundry agents require Entra ID (Azure AD) token authentication
+                logger.info("Using Azure managed identity authentication for agent mode")
+                token = await self._get_azure_token()
+                if not token:
+                    logger.error("Failed to obtain Azure authentication token")
+                    return None
+                headers["Authorization"] = f"Bearer {token}"
+            else:
+                # Direct OpenAI models use API key authentication
+                api_key = config.get("azure_openai_api_key")
+                if not api_key:
+                    logger.error("No API key found in configuration (azure_openai_api_key)")
+                    return None
+                headers["api-key"] = api_key
 
             # Establish WebSocket connection to Azure
             azure_ws = await websockets.connect(azure_url, additional_headers=headers)
@@ -229,6 +240,34 @@ class VoiceProxyHandler:
 
         except Exception as e:
             logger.error("Failed to connect to Azure: %s", e)
+            return None
+
+    async def _get_azure_token(self) -> Optional[str]:
+        """
+        Get Azure authentication token using managed identity.
+        
+        Uses DefaultAzureCredential which automatically handles:
+        - Managed Identity (when deployed to Azure)
+        - Azure CLI credentials (for local development)
+        - Environment variables
+        
+        Returns:
+            Access token string or None if authentication fails
+        """
+        try:
+            from azure.identity.aio import DefaultAzureCredential
+            
+            # Scope for Azure AI services
+            scope = "https://cognitiveservices.azure.com/.default"
+            
+            # Get token using managed identity or other available credentials
+            credential = DefaultAzureCredential()
+            token_result = await credential.get_token(scope)
+            await credential.close()
+            
+            return token_result.token
+        except Exception as e:
+            logger.error("Failed to obtain Azure token: %s", e)
             return None
 
     def _build_azure_url(self, agent_id: Optional[str], agent_config: Optional[Dict[str, Any]]) -> str:
@@ -253,10 +292,10 @@ class VoiceProxyHandler:
         # If agent config exists, use agent-specific URL construction
         if agent_config:
             return self._build_agent_specific_url(base_url, agent_id, agent_config)
-        # If global agent_id configured, use that with project-id
+        # If global agent_id configured, use that with agent-project-name
         if config["agent_id"]:
             project_name = config["azure_ai_project_name"]
-            return f"{base_url}&agent-id={config['agent_id']}&project-id={project_name}"
+            return f"{base_url}&agent-id={config['agent_id']}&agent-project-name={project_name}"
         # Fallback to model name from configuration
         model_name = config["model_deployment_name"]
         return f"{base_url}&model={model_name}"
@@ -309,9 +348,9 @@ class VoiceProxyHandler:
             Complete URL with agent-specific parameters
         """
         if agent_config.get("is_azure_agent"):
-            # For Azure AI agents, add agent-id and project-id
+            # For Azure AI agents, add agent-id and agent-project-name
             project_name = config["azure_ai_project_name"]
-            return f"{base_url}&agent-id={agent_id}&project-id={project_name}"
+            return f"{base_url}&agent-id={agent_id}&agent-project-name={project_name}"
         # For local agents, use the model parameter
         model_name = agent_config.get("model", config["model_deployment_name"])
         return f"{base_url}&model={model_name}"
